@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>Tambaqui</Name>
+  <Repository>ghcr.io/koalitos/tambaqui:latest</Repository>
+  <Registry>https://github.com/koalitos/tambaqui/pkgs/container/tambaqui</Registry>
+  <Branch>
+    <Tag>latest</Tag>
+    <TagDescription>Stable</TagDescription>
+  </Branch>
+  <Network>bridge</Network>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/koalitos/tambaqui/issues</Support>
+  <Project>https://github.com/koalitos/tambaqui</Project>
+  <Overview>
+    Tambaqui - IA brasileira de código com API OpenAI-compatível.
+    Baixa modelos HuggingFace (Qwen, DeepSeek, CodeLlama), chat com busca web, streaming, admin web.
+    Funciona com Open WebUI, Continue.dev, LibreChat e qualquer client OpenAI.
+  </Overview>
+  <Category>AI: Productivity: Tools:</Category>
+  <WebUI>http://[IP]:[PORT:8000]</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/koalitos/tambaqui/main/unraid-template.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/koalitos/tambaqui/main/docs/icon.png</Icon>
+  <Description>
+    IA brasileira especialista em código. API compatível com OpenAI (/v1/chat/completions).
+    Baixe modelos de código direto pelo admin web. Pre-carregamento na RAM como shaders de jogo.
+    Login padrão: admin / tambaqui (troque após primeiro acesso).
+  </Description>
+  <Config Name="Web UI Port" Target="8000" Default="8000" Mode="tcp" Description="Porta da interface web e API" Type="Port" Display="always" Required="true" Mask="false">8000</Config>
+  <Config Name="Modelos" Target="/app/modelos" Default="/mnt/user/appdata/tambaqui/modelos" Mode="rw" Description="Pasta dos modelos HuggingFace" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/tambaqui/modelos</Config>
+  <Config Name="Dados" Target="/app/dados" Default="/mnt/user/appdata/tambaqui/dados" Mode="rw" Description="Dados: users, sessões, conversas" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/tambaqui/dados</Config>
+  <Config Name="Admin User" Target="TAMBAQUI_ADMIN_USER" Default="admin" Mode="" Description="Usuário admin padrão" Type="Variable" Display="always" Required="true" Mask="false">admin</Config>
+  <Config Name="Admin Password" Target="TAMBAQUI_ADMIN_PASS" Default="tambaqui" Mode="" Description="Senha do admin (troque!)" Type="Variable" Display="always" Required="true" Mask="true">tambaqui</Config>
+</Container>

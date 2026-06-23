@@ -1,10 +1,7 @@
 name: tambaqui
 services:
   tambaqui:
-    image: tambaqui:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/koalitos/tambaqui:latest
     container_name: tambaqui
     restart: unless-stopped
     ports:
@@ -30,19 +27,20 @@ x-casaos:
   main: tambaqui
   store_app_id: tambaqui
   category: AI
-  author: Tambaqui
-  developer: Tambaqui
+  author: koalitos
+  developer: koalitos
   title:
     en_us: "Tambaqui - AI Code Assistant"
     pt_br: "Tambaqui - IA de Código"
   description:
-    en_us: "Brazilian AI coding assistant with OpenAI-compatible API. Download HuggingFace models, chat with web search, manage via admin panel."
-    pt_br: "IA brasileira de código com API OpenAI-compatível. Baixe modelos HuggingFace, chat com busca web, gerencie pelo admin."
+    en_us: "Local AI coding assistant with OpenAI-compatible API. Download HuggingFace models, chat with web search, admin panel."
+    pt_br: "IA local de código com API OpenAI-compatível. Baixe modelos HuggingFace, chat com busca web, painel admin."
   tagline:
     en_us: "Local AI for coding"
     pt_br: "IA local para código"
   port_map: "8000"
   scheme: http
+  icon: https://raw.githubusercontent.com/koalitos/tambaqui/main/docs/icon.png
   tips:
     before_install:
       en_us: "Default login: admin / tambaqui. Change password after first login."

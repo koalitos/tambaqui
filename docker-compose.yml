@@ -2,7 +2,8 @@ version: "3.8"
 
 services:
   tambaqui:
-    build: .
+    image: ghcr.io/koalitos/tambaqui:latest
+    # Ou build local: build: .
     container_name: tambaqui
     ports:
       - "8000:8000"
@@ -14,11 +15,3 @@ services:
       - PYTHONUNBUFFERED=1
       - TAMBAQUI_ADMIN_USER=admin
       - TAMBAQUI_ADMIN_PASS=tambaqui
-    # Para CasaOS: descomente as labels abaixo
-    # labels:
-    #   icon: https://raw.githubusercontent.com/seu-repo/main/icon.png
-    #   web: http://[IP]:8000
-    #   io.casaos.store.app.name: Tambaqui
-    #   io.casaos.store.app.category: AI
-    #   io.casaos.store.app.port: "8000"
-    #   io.casaos.store.app.description: "IA brasileira de código - API OpenAI-compatível"

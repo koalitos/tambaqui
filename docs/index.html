@@ -83,6 +83,7 @@ footer{text-align:center;padding:40px 20px;color:var(--t2);font-size:13px;border
 <div class="tab-bar">
     <div class="tab active" onclick="showTab('linux')">Linux/macOS</div>
     <div class="tab" onclick="showTab('docker')">Docker</div>
+    <div class="tab" onclick="showTab('unraid')">Unraid</div>
     <div class="tab" onclick="showTab('casaos')">CasaOS</div>
 </div>
 
@@ -122,6 +123,35 @@ docker compose up -d</code><button class="copy" onclick="cp(this)">Copiar</butto
 
 <h3>4. Baixar modelo</h3>
 <p>Acesse <code>/admin</code> e clique "Baixar" no modelo desejado.</p>
+</div>
+
+<div class="tab-content" id="tab-unraid">
+<h3>Opção 1: Template XML (recomendado)</h3>
+<p>No Unraid, vá em <strong>Docker → Add Container → Template URL</strong> e cole:</p>
+<pre><code>https://raw.githubusercontent.com/koalitos/tambaqui/main/unraid-template.xml</code><button class="copy" onclick="cp(this)">Copiar</button></pre>
+<p>Clique Apply. O Unraid configura tudo automaticamente.</p>
+
+<h3>Opção 2: Docker Compose</h3>
+<pre><code>mkdir -p /mnt/user/appdata/tambaqui
+cd /mnt/user/appdata/tambaqui
+wget https://raw.githubusercontent.com/koalitos/tambaqui/main/docker-compose.yml
+docker compose up -d</code><button class="copy" onclick="cp(this)">Copiar</button></pre>
+
+<h3>Opção 3: Manual</h3>
+<pre><code>docker run -d \
+  --name tambaqui \
+  -p 8000:8000 \
+  -v /mnt/user/appdata/tambaqui/modelos:/app/modelos \
+  -v /mnt/user/appdata/tambaqui/dados:/app/dados \
+  -e TAMBAQUI_ADMIN_USER=admin \
+  -e TAMBAQUI_ADMIN_PASS=tambaqui \
+  --restart unless-stopped \
+  ghcr.io/koalitos/tambaqui:latest</code><button class="copy" onclick="cp(this)">Copiar</button></pre>
+
+<h3>Acessar</h3>
+<p>Abra <code>http://ip-do-unraid:8000</code></p>
+<p>Login: <code>admin</code> / <code>tambaqui</code></p>
+<p style="color:var(--or);margin-top:8px">Troque a senha no primeiro acesso!</p>
 </div>
 
 <div class="tab-content" id="tab-casaos">
