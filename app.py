@@ -325,6 +325,20 @@ class ModelManager:
         _salvar_config(cfg)
         return {"ok": True, "device": device, "aviso": "Recarregue o modelo pra aplicar."}
 
+    def get_api_mode(self) -> str:
+        """Retorna modo da API: 'direto' (só modelo) ou 'busca' (modelo + web search)."""
+        cfg = _carregar_config()
+        return cfg.get("api_mode", "direto")
+
+    def set_api_mode(self, mode: str) -> dict:
+        """Define modo da API."""
+        if mode not in ("direto", "busca"):
+            return {"erro": "Modo inválido. Use: direto ou busca"}
+        cfg = _carregar_config()
+        cfg["api_mode"] = mode
+        _salvar_config(cfg)
+        return {"ok": True, "mode": mode}
+
     # --- Descoberta ---
 
     def listar_locais(self) -> list:
@@ -1017,6 +1031,18 @@ async def chat_completions(req: ChatRequest, request: Request):
     messages = [{"role": m.role, "content": m.content} for m in req.messages]
     max_tokens = req.max_tokens or 2048
 
+    # Se modo "busca", injetar contexto web na última mensagem do user
+    if manager.get_api_mode() == "busca" and messages:
+        last_user = None
+        for i in range(len(messages) - 1, -1, -1):
+            if messages[i]["role"] == "user":
+                last_user = i
+                break
+        if last_user is not None:
+            pesquisa = buscar_web(messages[last_user]["content"])
+            if pesquisa["contexto"]:
+                messages[last_user]["content"] = f"Contexto da pesquisa:\n{pesquisa['contexto'][:2500]}\n\n---\n{messages[last_user]['content']}"
+
     if req.stream:
         return StreamingResponse(_stream_response(messages, req), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
@@ -1182,6 +1208,14 @@ async def api_descarregar():
 @app.delete("/api/modelos/{nome}")
 async def api_deletar_modelo(nome: str):
     return manager.deletar(nome)
+
+@app.get("/api/mode")
+async def api_get_mode():
+    return {"mode": manager.get_api_mode()}
+
+@app.post("/api/mode")
+async def api_set_mode(mode: str):
+    return manager.set_api_mode(mode)
 
 @app.get("/api/devices")
 async def api_devices():
@@ -1626,6 +1660,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 
 <div class="card">
+<h2>Modo de Resposta da API</h2>
+<p style="font-size:13px;color:var(--t2);margin-bottom:10px">Como a API <code>/v1/chat/completions</code> responde pros CLIs externos:</p>
+<div style="display:flex;gap:8px;flex-wrap:wrap" id="modoList"></div>
+</div>
+
+<div class="card">
 <h2>Sua API Key</h2>
 <div class="api-info" id="apiKeyInfo">Carregando...</div>
 <button class="btn btn-a" onclick="regenKey()" style="margin-top:10px">Regenerar API Key</button>
@@ -1703,6 +1743,26 @@ async function baixar(n){const r=await fetch('/api/modelos/baixar?nome='+n,{meth
 async function carregar(n){const r=await fetch('/api/modelos/carregar?nome='+n,{method:'POST'});const d=await r.json();toast(d.status||'Carregando...');load()}
 async function descarregar(){await fetch('/api/modelos/descarregar',{method:'POST'});toast('Descarregado');load()}
 async function deletar(n){if(!confirm('Deletar '+n+'?'))return;await fetch('/api/modelos/'+n,{method:'DELETE'});toast('Deletado');load()}
+
+// Modo de resposta da API
+async function loadModo(){
+    try{
+        const r=await fetch('/api/mode');const d=await r.json();const modo=d.mode;
+        document.getElementById('modoList').innerHTML=[
+            {id:'direto',nome:'Só Modelo',desc:'Resposta direto do modelo, sem busca. Mais rápido. Ideal pra CLIs de código (Hermes, Aider, Cline).'},
+            {id:'busca',nome:'Modelo + Busca Web',desc:'Pesquisa na Wikipedia, StackOverflow e DuckDuckGo antes de responder. Mais completo mas mais lento.'}
+        ].map(m=>{
+            const sel=m.id===modo;
+            return`<div class="mi ${sel?'act':''}" style="cursor:pointer;flex:1;min-width:250px" onclick="setModo('${m.id}')">
+                <div class="nm">${sel?'●':'○'} ${m.nome}<br><span style="font-size:11px;color:var(--t2)">${m.desc}</span></div>
+                ${sel?'<span class="badge">ativo</span>':''}
+            </div>`}).join('');
+    }catch(e){}
+}
+async function setModo(m){
+    await fetch('/api/mode?mode='+m,{method:'POST'});
+    toast('Modo alterado: '+m);loadModo();
+}
 
 // Devices
 async function loadDevices(){
@@ -1798,6 +1858,31 @@ resp = client.chat.completions.create(
     messages=[{"role": "user", "content": "olá"}],
 )
 print(resp.choices[0].message.content)</code></pre></details>
+
+            <details style="margin-bottom:10px" open><summary style="cursor:pointer;color:var(--or);font-weight:700;font-size:13px">Hermes CLI (Nous Research)</summary>
+            <p style="font-size:13px;color:var(--t2);padding:6px 0">Crie/edite <code>~/.hermes/config.yaml</code>:</p>
+            <pre style="background:var(--bg);padding:10px;margin:8px 0;border-radius:4px;font-size:12px"><code>model:
+  default: ${modelo||'qwen2.5-coder-0.5b'}
+  provider: custom
+  base_url: ${base}
+  api_key: ${key}</code></pre>
+            <p style="font-size:13px;color:var(--t2);padding:4px 0">Ou via env (<code>~/.hermes/.env</code>):</p>
+            <pre style="background:var(--bg);padding:10px;margin:8px 0;border-radius:4px;font-size:12px"><code>OPENAI_BASE_URL=${base}
+OPENAI_API_KEY=${key}</code></pre>
+            <p style="font-size:13px;color:var(--t2);padding:4px 0">Depois rode:</p>
+            <pre style="background:var(--bg);padding:10px;margin:8px 0;border-radius:4px;font-size:12px"><code>hermes chat</code></pre>
+            </details>
+
+            <details style="margin-bottom:10px"><summary style="cursor:pointer;color:var(--tx);font-weight:600;font-size:13px">Aider</summary>
+            <pre style="background:var(--bg);padding:10px;margin:8px 0;border-radius:4px;font-size:12px"><code>aider --openai-api-base ${base} \\
+  --openai-api-key ${key} \\
+  --model openai/${modelo||'*'}</code></pre></details>
+
+            <details style="margin-bottom:10px"><summary style="cursor:pointer;color:var(--tx);font-weight:600;font-size:13px">Cline (VS Code)</summary>
+            <p style="font-size:13px;color:var(--t2);padding:6px 0">Settings → Cline → API Provider: OpenAI Compatible<br>
+            Base URL: <code>${base}</code><br>
+            API Key: <code>${key}</code><br>
+            Model: <code>${modelo||'*'}</code></p></details>
         `;
     }catch(e){}
 }
@@ -1847,7 +1932,7 @@ async function deletarUser(u){
     await fetch('/api/auth/users/'+u,{method:'DELETE'});toast('Deletado');loadUsers();
 }
 
-load();loadUsers();loadApiKey();loadDevices();
+load();loadUsers();loadApiKey();loadDevices();loadModo();
 // Refresh mais rápido quando tem download ativo
 setInterval(()=>{
     const hasDownload=document.querySelector('.bar');
