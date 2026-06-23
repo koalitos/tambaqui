@@ -356,15 +356,22 @@ class ModelManager:
         _salvar_config(cfg)
         return {"ok": True, "device": device, "aviso": "Recarregue o modelo pra aplicar."}
 
-    def get_preload(self) -> bool:
+    def get_load_mode(self) -> str:
+        """Modo de carregamento: 'manual', 'preload', 'ondemand'."""
         cfg = _carregar_config()
-        return cfg.get("preload", False)
+        # Migrar config antiga
+        if "preload" in cfg and "load_mode" not in cfg:
+            return "preload" if cfg["preload"] else "manual"
+        return cfg.get("load_mode", "manual")
 
-    def set_preload(self, enabled: bool) -> dict:
+    def set_load_mode(self, mode: str) -> dict:
+        if mode not in ("manual", "preload", "ondemand"):
+            return {"erro": "Modo inválido. Use: manual, preload, ondemand"}
         cfg = _carregar_config()
-        cfg["preload"] = enabled
+        cfg["load_mode"] = mode
+        cfg.pop("preload", None)  # limpar config antiga
         _salvar_config(cfg)
-        return {"ok": True, "preload": enabled}
+        return {"ok": True, "load_mode": mode}
 
     def get_idle_timeout(self) -> int:
         cfg = _carregar_config()
@@ -722,26 +729,53 @@ class ModelManager:
         self._idle_timer.daemon = True
         self._idle_timer.start()
 
+    def _auto_carregar(self):
+        """Carrega modelo automaticamente se modo ondemand."""
+        if self.model:
+            return True
+        locais = self.listar_locais()
+        if not locais:
+            return False
+        # Usar o último modelo ativo ou o primeiro disponível
+        nome = self.modelo_ativo or locais[0]["nome"]
+        logger.info(f"🔄 Sob demanda - carregando {nome}...")
+        self.carregar(nome)
+        return self.model is not None
+
     def gerar(self, messages: list, max_tokens: int = 2048, temperature: float = 0.7,
               top_p: float = 0.9, stream: bool = False) -> any:
         """Gera resposta. Se stream=True, retorna generator."""
+        mode = self.get_load_mode()
+
+        # Sob demanda: carregar antes de gerar
+        if mode == "ondemand" and not self.model:
+            if not self._auto_carregar():
+                return None
+
         if not self.model or not self.tokenizer:
             return None
 
         self._resetar_idle_timer()
 
         if stream:
-            return self._gerar_stream_wrapper(messages, max_tokens, temperature, top_p)
+            return self._gerar_stream_wrapper(messages, max_tokens, temperature, top_p, mode)
         else:
             resultado = self._gerar_completo(messages, max_tokens, temperature, top_p)
             self._limpar_cache()
+            # Sob demanda: descarregar depois de responder
+            if mode == "ondemand":
+                logger.info("📦 Sob demanda - descarregando modelo")
+                self.descarregar()
             return resultado
 
-    def _gerar_stream_wrapper(self, messages, max_tokens, temperature, top_p):
-        """Wrapper do stream que limpa cache no final."""
+    def _gerar_stream_wrapper(self, messages, max_tokens, temperature, top_p, mode=None):
+        """Wrapper do stream que limpa cache e descarrega se ondemand."""
         for chunk in self._gerar_stream(messages, max_tokens, temperature, top_p):
             yield chunk
         self._limpar_cache()
+        if mode == "ondemand":
+            logger.info("📦 Sob demanda - descarregando modelo")
+            self.descarregar()
 
     def _get_gen_kwargs(self, max_tokens: int, temperature: float, top_p: float) -> dict:
         """Kwargs comuns de geração otimizados."""
@@ -1017,11 +1051,14 @@ manager = ModelManager()
 @app.on_event("startup")
 async def startup():
     locais = manager.listar_locais()
-    if locais and manager.get_preload():
-        logger.info(f"🚀 Pre-carregar ativado. Carregando {locais[0]['nome']}...")
+    mode = manager.get_load_mode()
+    if locais and mode == "preload":
+        logger.info(f"🚀 Pre-load ativado. Carregando {locais[0]['nome']}...")
         threading.Thread(target=lambda: manager.carregar(locais[0]["nome"]), daemon=True).start()
+    elif locais and mode == "ondemand":
+        logger.info(f"⚡ Modo sob demanda. Modelo carrega quando chegar request.")
     elif locais:
-        logger.info(f"📦 {len(locais)} modelo(s) disponível(is). Carregue pelo /admin.")
+        logger.info(f"📦 {len(locais)} modelo(s). Carregue pelo /admin.")
 
 
 # --- Auth ---
@@ -1379,13 +1416,13 @@ async def api_descarregar():
 async def api_deletar_modelo(nome: str):
     return manager.deletar(nome)
 
-@app.get("/api/preload")
-async def api_get_preload():
-    return {"preload": manager.get_preload()}
+@app.get("/api/load-mode")
+async def api_get_load_mode():
+    return {"load_mode": manager.get_load_mode()}
 
-@app.post("/api/preload")
-async def api_set_preload(enabled: bool):
-    return manager.set_preload(enabled)
+@app.post("/api/load-mode")
+async def api_set_load_mode(mode: str):
+    return manager.set_load_mode(mode)
 
 @app.get("/api/idle")
 async def api_get_idle():

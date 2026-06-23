@@ -113,9 +113,9 @@ details pre{background:var(--bg);padding:.75rem;margin:.375rem 0;border-radius:c
 
 <div class="card"><div class="card-title"><i data-lucide="battery-charging" style="width:16px;height:16px"></i> Energia</div>
 <p class="card-desc">Controle como o modelo usa memoria quando idle.</p>
-<div style="font-size:.75rem;font-weight:500;color:var(--muted-fg);margin-bottom:.375rem">Pre-carregar</div>
-<div class="select-group" id="preloadList"></div>
-<div style="font-size:.75rem;font-weight:500;color:var(--muted-fg);margin:.75rem 0 .375rem">Idle timeout</div>
+<div style="font-size:.75rem;font-weight:500;color:var(--muted-fg);margin-bottom:.375rem">Modo de carregamento</div>
+<div class="select-group" id="loadModeList"></div>
+<div style="font-size:.75rem;font-weight:500;color:var(--muted-fg);margin:.75rem 0 .375rem">Idle timeout (so funciona no modo Manual e Pre-load)</div>
 <div class="select-group" id="idleList"></div></div>
 
 <div class="card"><div class="card-title"><i data-lucide="settings-2" style="width:16px;height:16px"></i> Modo da API</div>
@@ -200,10 +200,14 @@ async function loadDevices(){try{const r=await fetch('/api/devices');const d=awa
         <div class="item-name">${dv.id===d.atual?'●':'○'} ${dv.nome}<small>${dv.info}</small></div></div>`).join('');lucide.createIcons()}catch(e){}}
 async function setDevice(id){await fetch('/api/devices?device='+id,{method:'POST'});document.getElementById('deviceAviso').style.display='block';toast('Device: '+id);loadDevices();load()}
 
-async function loadPreload(){try{const r=await fetch('/api/preload');const d=await r.json();const cur=d.preload;
-    document.getElementById('preloadList').innerHTML=[{v:false,l:'Desligado',d:'Inicia leve. Admin carrega.'},{v:true,l:'Ligado',d:'Carrega ao iniciar.'}].map(o=>{const sel=(o.v===cur);
-        return`<div class="item select-item ${sel?'active':''}" onclick="setPreload(${o.v})" style="flex:1;min-width:12rem"><div class="item-name">${sel?'●':'○'} ${o.l}<small>${o.d}</small></div></div>`}).join('')}catch(e){}}
-async function setPreload(v){await fetch('/api/preload?enabled='+v,{method:'POST'});toast(v?'Pre-carregar ativado':'Desativado');loadPreload()}
+async function loadLoadMode(){try{const r=await fetch('/api/load-mode');const d=await r.json();const cur=d.load_mode;
+    document.getElementById('loadModeList').innerHTML=[
+        {v:'manual',l:'Manual',d:'Voce carrega pelo admin. Fica na RAM ate descarregar.'},
+        {v:'preload',l:'Pre-load',d:'Carrega automatico ao iniciar o servidor.'},
+        {v:'ondemand',l:'Sob demanda',d:'Carrega quando chega request, responde, descarrega. 0% RAM no idle.'}
+    ].map(o=>{const sel=(o.v===cur);
+        return`<div class="item select-item ${sel?'active':''}" onclick="setLoadMode('${o.v}')" style="flex:1;min-width:10rem"><div class="item-name">${sel?'●':'○'} ${o.l}<small>${o.d}</small></div></div>`}).join('')}catch(e){}}
+async function setLoadMode(v){await fetch('/api/load-mode?mode='+v,{method:'POST'});toast('Modo: '+v);loadLoadMode()}
 
 async function loadIdle(){try{const r=await fetch('/api/idle');const d=await r.json();const cur=d.idle_timeout_min;
     document.getElementById('idleList').innerHTML=[{v:0,l:'Sempre ligado'},{v:5,l:'5 min'},{v:15,l:'15 min'},{v:30,l:'30 min'},{v:60,l:'1 hora'}].map(o=>{const sel=o.v===cur;
@@ -258,7 +262,7 @@ async function loadApiKey(){try{const r=await fetch('/api/auth/api-key');if(r.st
     lucide.createIcons()}catch(e){}}
 async function regenKey(){if(!confirm('Regenerar? A key anterior para de funcionar.'))return;await fetch('/api/auth/api-key/regenerar',{method:'POST'});toast('Key regenerada');loadApiKey()}
 
-load();loadUsers();loadApiKey();loadDevices();loadPreload();loadIdle();loadModo();
+load();loadUsers();loadApiKey();loadDevices();loadLoadMode();loadIdle();loadModo();
 setInterval(load,2000);
 </script>
 </body></html>
