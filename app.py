@@ -715,11 +715,6 @@ class ModelManager:
     def gerar(self, messages: list, max_tokens: int = 2048, temperature: float = 0.7,
               top_p: float = 0.9, stream: bool = False) -> any:
         """Gera resposta. Se stream=True, retorna generator."""
-        # Auto-recarregar se foi descarregado por idle
-        if not self.model and self.modelo_ativo:
-            logger.info("🔄 Cold start - recarregando modelo...")
-            self.carregar(self.modelo_ativo)
-
         if not self.model or not self.tokenizer:
             return None
 
@@ -1011,9 +1006,10 @@ manager = ModelManager()
 # Auto-carregar modelo no startup
 @app.on_event("startup")
 async def startup():
+    # Não carrega modelo automaticamente - espera o admin escolher manualmente
     locais = manager.listar_locais()
     if locais:
-        threading.Thread(target=lambda: manager.carregar(locais[0]["nome"]), daemon=True).start()
+        logger.info(f"📦 {len(locais)} modelo(s) disponível(is). Carregue pelo /admin.")
 
 
 # --- Auth ---
