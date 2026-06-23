@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Tambaqui</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#09090b;color:#fafafa;min-height:100vh;display:flex;align-items:center;justify-content:center;background-image:radial-gradient(ellipse at top,#18181b 0%,#09090b 70%)}
+.card{background:#18181b;border:1px solid #27272a;border-radius:16px;padding:48px 40px;width:100%;max-width:400px;box-shadow:0 25px 50px -12px rgba(0,0,0,.5)}
+.logo{text-align:center;margin-bottom:32px}
+.logo h1{font-size:32px;font-weight:700;letter-spacing:-.02em}
+.logo h1 span{background:linear-gradient(135deg,#3b82f6,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.logo p{color:#71717a;font-size:14px;margin-top:6px}
+.field{margin-bottom:20px}
+.field label{display:block;font-size:13px;font-weight:500;color:#a1a1aa;margin-bottom:6px}
+.field input{width:100%;background:#09090b;border:1px solid #27272a;border-radius:10px;padding:12px 16px;color:#fafafa;font-size:15px;outline:none;transition:border .2s}
+.field input:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.15)}
+.btn{width:100%;padding:13px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:opacity .2s;margin-top:8px}
+.btn:hover{opacity:.9}
+.err{color:#ef4444;font-size:13px;text-align:center;margin-top:16px;display:none}
+</style>
+</head>
+<body>
+<div class="card">
+    <div class="logo">
+        <h1>🐟 <span>Tambaqui</span></h1>
+        <p>IA de código local</p>
+    </div>
+    <div class="field"><label>Usuário</label><input id="user" autofocus onkeydown="if(event.key==='Enter')document.getElementById('pass').focus()"></div>
+    <div class="field"><label>Senha</label><input id="pass" type="password" onkeydown="if(event.key==='Enter')login()"></div>
+    <button class="btn" onclick="login()">Entrar</button>
+    <div class="err" id="err"></div>
+</div>
+<script>
+async function login(){
+    const u=document.getElementById('user').value.trim(),p=document.getElementById('pass').value;
+    if(!u||!p)return;
+    const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,senha:p})});
+    const d=await r.json();
+    if(d.ok){window.location.href='/'}
+    else{const e=document.getElementById('err');e.textContent=d.erro||'Erro';e.style.display='block'}
+}
+</script>
+</body></html>

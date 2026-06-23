@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Tambaqui</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.0/marked.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#09090b;--s1:#18181b;--s2:#1e1e22;--bd:#27272a;--bd2:#3f3f46;--tx:#fafafa;--t2:#a1a1aa;--t3:#71717a;--blue:#3b82f6;--purple:#8b5cf6;--green:#22c55e;--orange:#f59e0b;--red:#ef4444;--grad:linear-gradient(135deg,#3b82f6,#8b5cf6)}
+body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--tx);height:100vh;display:flex;overflow:hidden}
+
+/* Sidebar */
+.side{width:280px;background:var(--s1);border-right:1px solid var(--bd);display:flex;flex-direction:column;height:100vh}
+.side-top{padding:16px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px}
+.side-top h2{font-size:15px;font-weight:600;flex:1;letter-spacing:-.01em}
+.side-top h2 span{background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.new-btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s}
+.new-btn:hover{background:#2563eb}
+.side-list{flex:1;overflow-y:auto;padding:8px}
+.si{padding:10px 12px;border-radius:8px;cursor:pointer;margin-bottom:2px;display:flex;align-items:center;gap:8px;transition:background .15s}
+.si:hover{background:var(--s2)}
+.si.act{background:var(--s2);border:1px solid var(--bd2)}
+.si-txt{flex:1;min-width:0}
+.si-title{font-size:13px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.si.act .si-title{color:var(--tx)}
+.si-meta{font-size:10px;color:var(--t3);margin-top:2px}
+.si-del{display:none;background:none;border:none;color:var(--t3);cursor:pointer;font-size:16px;padding:2px 4px;border-radius:4px;flex-shrink:0}
+.si-del:hover{color:var(--red);background:rgba(239,68,68,.1)}
+.si:hover .si-del{display:block}
+.side-foot{padding:12px 16px;border-top:1px solid var(--bd);display:flex;gap:12px;font-size:12px}
+.side-foot a{color:var(--t3);text-decoration:none;transition:color .15s}
+.side-foot a:hover{color:var(--tx)}
+
+/* Main */
+.main{flex:1;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+.topbar{background:var(--s1);border-bottom:1px solid var(--bd);padding:12px 24px;display:flex;align-items:center;gap:12px;flex-shrink:0}
+.topbar h1{font-size:16px;font-weight:600}
+.topbar h1 span{background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.topbar .badge{background:var(--s2);border:1px solid var(--bd);padding:3px 10px;border-radius:20px;font-size:11px;color:var(--t2);font-weight:500}
+.topbar .links{margin-left:auto;display:flex;gap:8px}
+.topbar .links a{color:var(--t3);text-decoration:none;font-size:12px;padding:5px 12px;border:1px solid var(--bd);border-radius:8px;transition:all .15s}
+.topbar .links a:hover{color:var(--tx);border-color:var(--bd2)}
+
+/* Chat */
+.chat{flex:1;overflow-y:auto;padding:24px}
+.chat-inner{max-width:800px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+.msg{display:flex;gap:12px;animation:fi .3s ease}
+.msg.u{flex-direction:row-reverse}
+.av{width:34px;height:34px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px}
+.msg.u .av{background:var(--blue);color:#fff;font-size:12px;font-weight:700}
+.msg.a .av{background:var(--s2);border:1px solid var(--bd)}
+.bubble{background:var(--s1);border:1px solid var(--bd);border-radius:14px;padding:16px 20px;max-width:85%;font-size:14px;line-height:1.75}
+.msg.u .bubble{background:linear-gradient(135deg,#1e3a5f,#1a2744);border-color:#2d4a6f;max-width:70%}
+.bubble h1,.bubble h2,.bubble h3{color:var(--blue);margin:14px 0 6px;font-size:15px;font-weight:600}
+.bubble h3{font-size:14px}
+.bubble p{margin:5px 0}
+.bubble ul,.bubble ol{margin:5px 0 5px 20px}
+.bubble li{margin:3px 0}
+.bubble hr{border:none;border-top:1px solid var(--bd);margin:12px 0}
+.bubble strong{color:var(--blue)}
+.bubble a{color:var(--blue);text-decoration:none}
+.bubble a:hover{text-decoration:underline}
+.bubble pre{background:#0c0c0e;border:1px solid var(--bd);border-radius:10px;padding:16px;margin:10px 0;overflow-x:auto;position:relative}
+.bubble pre code{font-family:'JetBrains Mono','SF Mono','Fira Code',monospace;font-size:13px;line-height:1.6;background:none;padding:0}
+.bubble code{font-family:'JetBrains Mono','SF Mono',monospace;font-size:13px;background:var(--s2);padding:2px 7px;border-radius:5px}
+.bubble blockquote{border-left:3px solid var(--blue);padding-left:12px;color:var(--t2);margin:8px 0}
+.bubble table{border-collapse:collapse;margin:8px 0;width:100%}
+.bubble th,.bubble td{border:1px solid var(--bd);padding:7px 12px;text-align:left;font-size:13px}
+.bubble th{background:var(--s2)}
+.fontes{font-size:11px;color:var(--t3);margin-top:8px;padding-top:8px;border-top:1px solid var(--bd);display:flex;flex-wrap:wrap;gap:4px}
+.fontes span{background:var(--s2);padding:2px 8px;border-radius:5px;border:1px solid var(--bd)}
+@keyframes fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+/* Copy button */
+.cpbtn{position:absolute;top:8px;right:8px;background:var(--bd);color:var(--t3);border:none;border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;opacity:0;transition:all .2s}
+pre:hover .cpbtn{opacity:1}
+.cpbtn:hover{background:var(--blue);color:#fff}
+
+/* Input */
+.input-wrap{background:var(--s1);border-top:1px solid var(--bd);padding:16px 24px;flex-shrink:0}
+.input-inner{max-width:800px;margin:0 auto}
+.input-box{display:flex;gap:10px;background:var(--bg);border:1px solid var(--bd);border-radius:12px;padding:4px}
+.input-box textarea{flex:1;background:transparent;border:none;padding:12px 16px;color:var(--tx);font-size:14px;outline:none;resize:none;min-height:24px;max-height:200px;font-family:inherit;line-height:1.5}
+.input-box button{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:10px 20px;font-weight:600;cursor:pointer;font-size:14px;align-self:flex-end;transition:all .2s}
+.input-box button:hover{background:#2563eb}
+.input-box button:disabled{opacity:.3;cursor:not-allowed}
+.status{text-align:center;padding:8px 0 0;font-size:11px;color:var(--t3)}
+
+/* Typing animation */
+.typing{display:flex;gap:5px;padding:8px 4px}
+.typing span{width:7px;height:7px;background:var(--t3);border-radius:50%;animation:bounce .6s infinite alternate}
+.typing span:nth-child(2){animation-delay:.15s}
+.typing span:nth-child(3){animation-delay:.3s}
+@keyframes bounce{to{transform:translateY(-8px);opacity:.4}}
+
+/* Warning */
+.warn{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:12px 20px;margin:12px 24px 0;font-size:13px;color:var(--orange);text-align:center}
+.warn a{color:var(--blue);font-weight:500}
+
+/* Config page */
+.config-page{max-width:600px;margin:30px auto;padding:0 20px}
+.config-page h2{font-size:20px;color:var(--blue);margin-bottom:20px;font-weight:600}
+.cfg-card{background:var(--s1);border:1px solid var(--bd);border-radius:12px;padding:24px;margin-bottom:16px}
+.cfg-card label{font-size:13px;color:var(--t2);display:block;margin-bottom:6px}
+.cfg-card code{background:var(--bg);padding:8px 12px;border-radius:6px;display:block;margin:4px 0;user-select:all;word-break:break-all;font-size:13px}
+.cfg-card input[type=password]{width:100%;background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:10px 14px;color:var(--tx);font-size:14px;outline:none}
+.cfg-card input:focus{border-color:var(--blue)}
+.cfg-btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:8px 18px;font-weight:600;cursor:pointer;font-size:13px}
+.cfg-btn:hover{background:#2563eb}
+.cfg-btn.sec{background:var(--s2);color:var(--t2);border:1px solid var(--bd)}
+.cfg-btn.sec:hover{color:var(--tx)}
+
+@media(max-width:768px){.side{display:none}}
+</style>
+</head>
+<body>
+<div class="side">
+    <div class="side-top">
+        <h2>🐟 <span>Tambaqui</span></h2>
+        <button class="new-btn" onclick="novaSessao()">+ Nova</button>
+    </div>
+    <div class="side-list" id="sessList"></div>
+    <div class="side-foot">
+        <a href="#" onclick="showConfig()">Minha conta</a>
+        <a href="/admin">Admin</a>
+        <a href="#" onclick="logout()">Sair</a>
+    </div>
+</div>
+<div class="main">
+    <div class="topbar">
+        <h1>🐟 <span>Tambaqui</span></h1>
+        <div class="badge" id="modelBadge">...</div>
+        <div class="links"><a href="/admin">Admin</a></div>
+    </div>
+    <div id="warn"></div>
+    <div class="chat" id="chatWrap">
+        <div class="chat-inner" id="chat">
+            <div class="msg a"><div class="av">🐟</div><div class="bubble">
+                <p><strong>Tambaqui</strong> — IA brasileira de código</p>
+                <p>Comece a conversar ou selecione uma sessão ao lado.</p>
+            </div></div>
+        </div>
+    </div>
+    <div class="input-wrap">
+        <div class="input-inner">
+            <div class="input-box">
+                <textarea id="in" rows="1" placeholder="Pergunte sobre código..."
+                    onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();go()}"
+                    oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,200)+'px'"></textarea>
+                <button id="btn" onclick="go()">Enviar</button>
+            </div>
+            <div class="status" id="st"></div>
+        </div>
+    </div>
+</div>
+<script>
+const R=new marked.Renderer();
+R.code=function(c,l){let t=typeof c==='object'?c.text:c,g=typeof c==='object'?c.lang:l;g=g||'';
+let h;try{h=g&&hljs.getLanguage(g)?hljs.highlight(t,{language:g}).value:hljs.highlightAuto(t).value}catch(e){h=t}
+return`<pre><code class="hljs">${h}</code><button class="cpbtn" onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent);this.textContent='✓ Copiado'">Copiar</button></pre>`};
+marked.setOptions({renderer:R,breaks:true,gfm:true});
+let sid=localStorage.getItem('t_sid')||null;
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
+
+async function loadSess(){
+    try{
+        const r=await fetch('/api/sessoes');const d=await r.json();
+        const el=document.getElementById('sessList');
+        if(!d.sessoes||!d.sessoes.length){el.innerHTML='<p style="padding:16px;color:var(--t3);font-size:13px">Nenhuma conversa ainda</p>';return}
+        el.innerHTML=d.sessoes.map(s=>{
+            const act=s.session_id===sid?'act':'';
+            const dt=s.atualizada_em?new Date(s.atualizada_em).toLocaleDateString('pt-BR'):'';
+            return`<div class="si ${act}">
+                <div class="si-txt" onclick="carregarSessao('${s.session_id}')">
+                    <div class="si-title">${esc(s.titulo||'Sem título')}</div>
+                    <div class="si-meta">${s.mensagens} msgs · ${dt}</div>
+                </div>
+                <button class="si-del" onclick="event.stopPropagation();delSessao('${s.session_id}')" title="Apagar">✕</button>
+            </div>`}).join('');
+    }catch(e){}
+}
+
+async function carregarSessao(id){
+    sid=id;localStorage.setItem('t_sid',sid);
+    try{
+        const r=await fetch('/api/sessoes/'+id);const d=await r.json();
+        const ch=document.getElementById('chat');ch.innerHTML='';
+        if(d.historico){
+            for(const m of d.historico){
+                if(m.role==='user') ch.innerHTML+=`<div class="msg u"><div class="av">EU</div><div class="bubble"><p>${esc(m.content)}</p></div></div>`;
+                else ch.innerHTML+=`<div class="msg a"><div class="av">🐟</div><div class="bubble">${marked.parse(m.content)}</div></div>`;
+            }
+            ch.querySelectorAll('pre code').forEach(b=>hljs.highlightElement(b));
+            document.getElementById('chatWrap').scrollTop=999999;
+        }
+    }catch(e){}
+    loadSess();
+}
+
+async function delSessao(id){
+    if(!confirm('Apagar esta conversa?'))return;
+    await fetch('/api/sessoes/'+id,{method:'DELETE'});
+    if(sid===id){sid=null;localStorage.removeItem('t_sid');document.getElementById('chat').innerHTML='<div class="msg a"><div class="av">🐟</div><div class="bubble"><p>Conversa apagada.</p></div></div>'}
+    loadSess();
+}
+
+function novaSessao(){sid=null;localStorage.removeItem('t_sid');
+    document.getElementById('chat').innerHTML='<div class="msg a"><div class="av">🐟</div><div class="bubble"><p><strong>Nova conversa</strong></p></div></div>';loadSess()}
+
+async function showConfig(){
+    try{
+        const r=await fetch('/api/auth/api-key');if(r.status!==200)return;
+        const d=await r.json();const me=await(await fetch('/api/auth/me')).json();
+        document.getElementById('chat').innerHTML=`<div class="config-page">
+            <h2>Minha Conta</h2>
+            <div class="cfg-card">
+                <label>Usuário</label><p>${me.username} ${me.admin?'(admin)':''}</p>
+                <label style="margin-top:16px">API Key</label><code>${d.api_key}</code>
+                <label style="margin-top:16px">Trocar senha</label>
+                <div style="display:flex;gap:8px;margin-top:6px">
+                    <input type="password" id="cfgPass" placeholder="Nova senha" style="flex:1">
+                    <button class="cfg-btn" onclick="trocarSenha('${me.username}')">Salvar</button>
+                </div>
+            </div>
+            <div class="cfg-card">
+                <label>Conexão API</label>
+                <code style="white-space:pre;font-size:12px">OPENAI_API_BASE=${d.base_url}\nOPENAI_API_KEY=${d.api_key}</code>
+            </div>
+            <button class="cfg-btn sec" onclick="novaSessao()">← Voltar ao chat</button>
+        </div>`;
+    }catch(e){}
+}
+async function trocarSenha(u){const p=document.getElementById('cfgPass').value;if(!p)return;
+    const r=await fetch('/api/auth/trocar-senha',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,nova_senha:p})});
+    const d=await r.json();alert(d.ok?'Senha alterada!':d.erro||'Erro');document.getElementById('cfgPass').value=''}
+async function logout(){await fetch('/api/auth/logout',{method:'POST'});window.location.href='/login'}
+
+async function go(){
+    const ta=document.getElementById('in'),m=ta.value.trim();if(!m)return;
+    const ch=document.getElementById('chat'),bt=document.getElementById('btn');
+    ch.innerHTML+=`<div class="msg u"><div class="av">EU</div><div class="bubble"><p>${esc(m)}</p></div></div>`;
+    ta.value='';ta.style.height='auto';bt.disabled=true;bt.textContent='···';
+    const el=document.createElement('div');el.className='msg a';
+    el.innerHTML=`<div class="av">🐟</div><div class="bubble"><div class="typing"><span></span><span></span><span></span></div></div>`;
+    ch.appendChild(el);document.getElementById('chatWrap').scrollTop=999999;
+    try{
+        const body={mensagem:m,buscar_web:true};if(sid)body.session_id=sid;
+        const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        const bb=el.querySelector('.bubble');bb.innerHTML='';
+        let full='',fontes=[];
+        const reader=r.body.getReader(),dec=new TextDecoder();let buf='';
+        while(true){
+            const{done,value}=await reader.read();if(done)break;
+            buf+=dec.decode(value,{stream:true});const lines=buf.split('\n');buf=lines.pop();
+            for(const line of lines){
+                if(!line.startsWith('data: '))continue;
+                try{const d=JSON.parse(line.slice(6));
+                    if(d.type==='meta'){if(d.session_id){sid=d.session_id;localStorage.setItem('t_sid',sid)}fontes=d.fontes||[]}
+                    else if(d.type==='chunk'){full+=d.content;bb.innerHTML=marked.parse(full);bb.querySelectorAll('pre code').forEach(b=>hljs.highlightElement(b));document.getElementById('chatWrap').scrollTop=999999}
+                    else if(d.type==='done'){let ft='';if(fontes.length)ft=`<div class="fontes">${fontes.map(f=>`<span>${f}</span>`).join('')}</div>`;bb.innerHTML=marked.parse(full)+ft;bb.querySelectorAll('pre code').forEach(b=>hljs.highlightElement(b));loadSess()}
+                }catch(pe){}
+            }
+        }
+    }catch(e){el.querySelector('.bubble').innerHTML=`<p style="color:var(--red)">Erro: ${e}</p>`}
+    bt.disabled=false;bt.textContent='Enviar';document.getElementById('chatWrap').scrollTop=999999;
+}
+
+async function sts(){
+    try{const r=await fetch('/api/status'),d=await r.json(),w=document.getElementById('warn'),mb=document.getElementById('modelBadge');
+    if(!d.pronto&&!d.carregando){w.innerHTML='<div class="warn">Nenhum modelo carregado. <a href="/admin">Abra o Admin</a> para baixar.</div>'}else{w.innerHTML=''}
+    mb.textContent=d.pronto?d.modelo_ativo:(d.carregando?'Carregando...':'Sem modelo');
+    const cpu=d.cpu_percent!==undefined?` · CPU ${d.cpu_percent}%`:'';
+    const ram=d.ram_percent!==undefined?` · RAM ${d.ram_percent}%`:'';
+    document.getElementById('st').textContent=`${d.pronto?d.modelo_ativo:'—'}${cpu}${ram}${sid?' · '+sid.substring(0,8):''}`}catch(e){}
+}
+loadSess();sts();setInterval(sts,5000);
+</script>
+</body></html>
