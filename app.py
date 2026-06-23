@@ -110,6 +110,37 @@ def get_system_info() -> dict:
         info["cpu_percent"] = psutil.cpu_percent(interval=0.1)
         proc = psutil.Process(os.getpid())
         info["proc_ram_mb"] = round(proc.memory_info().rss / (1024**2), 1)
+    # GPU
+    info["gpus"] = []
+    try:
+        import torch
+        if torch.cuda.is_available():
+            for i in range(torch.cuda.device_count()):
+                props = torch.cuda.get_device_properties(i)
+                total = props.total_mem
+                usado = torch.cuda.memory_allocated(i)
+                reservado = torch.cuda.memory_reserved(i)
+                info["gpus"].append({
+                    "id": i, "nome": props.name,
+                    "vram_total_gb": round(total / (1024**3), 1),
+                    "vram_usada_gb": round(usado / (1024**3), 1),
+                    "vram_reservada_gb": round(reservado / (1024**3), 1),
+                    "vram_percent": round(usado / total * 100, 1) if total else 0,
+                    "tipo": "cuda",
+                })
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            # MPS não tem API de memória detalhada, mas podemos mostrar alocação
+            mps_alloc = torch.mps.current_allocated_memory() if hasattr(torch.mps, "current_allocated_memory") else 0
+            info["gpus"].append({
+                "id": 0, "nome": "Apple GPU (MPS)",
+                "vram_total_gb": 0,
+                "vram_usada_gb": round(mps_alloc / (1024**3), 1),
+                "vram_reservada_gb": 0,
+                "vram_percent": 0,
+                "tipo": "mps",
+            })
+    except Exception:
+        pass
     return info
 
 

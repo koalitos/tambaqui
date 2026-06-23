@@ -59,6 +59,7 @@ details pre{background:var(--bg);padding:12px;margin:6px 0;border-radius:8px;fon
 
 <div class="card"><h2>Status</h2><div class="grid" id="sts"></div></div>
 <div class="card"><h2>Sistema</h2><div class="grid" id="sys"></div></div>
+<div class="card" id="gpuCard" style="display:none"><h2>GPU</h2><div class="grid" id="gpuStats"></div></div>
 
 <div class="card"><h2>Device (CPU/GPU)</h2>
 <p class="desc">Escolha onde rodar o modelo. GPU é ~10-50x mais rápido.</p>
@@ -116,6 +117,20 @@ async function load(){
         <div class="stat"><div class="n">${d.proc_ram_mb||0}MB</div><div class="l">Processo</div></div>
         <div class="stat"><div class="n" style="font-size:14px">${d.platform||''}</div><div class="l">Py ${d.python||''}</div></div>
     `;
+    // GPU
+    const gc=document.getElementById('gpuCard'),gs=document.getElementById('gpuStats');
+    if(d.gpus&&d.gpus.length){
+        gc.style.display='block';
+        gs.innerHTML=d.gpus.map(g=>{
+            if(g.tipo==='cuda'){
+                return`<div class="stat"><div class="n" style="color:${bc(g.vram_percent)}">${g.vram_percent}%</div><div class="l">${g.nome}</div></div>
+                <div class="stat"><div class="n">${g.vram_usada_gb}/${g.vram_total_gb}G</div><div class="l">VRAM Usada</div></div>
+                <div class="stat"><div class="n">${g.vram_reservada_gb}G</div><div class="l">VRAM Reservada</div></div>`}
+            else{
+                return`<div class="stat"><div class="n" style="color:var(--blue)">${g.vram_usada_gb}G</div><div class="l">${g.nome}</div></div>
+                <div class="stat"><div class="n" style="font-size:14px">Metal</div><div class="l">Memória compartilhada</div></div>`}
+        }).join('')}
+    else{gc.style.display='none'}
     const r2=await fetch('/api/modelos'),d2=await r2.json();
     const loc=document.getElementById('locais');
     if(!d2.locais.length){loc.innerHTML='<p style="color:var(--t3);font-size:13px">Nenhum modelo baixado</p>'}
