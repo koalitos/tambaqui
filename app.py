@@ -1305,6 +1305,72 @@ def _contar_tokens(text: str) -> int:
     return len(text) // 4
 
 
+def _detectar_cli(messages: list) -> str:
+    """Detecta qual CLI está chamando baseado no system prompt."""
+    if not messages:
+        return ""
+    sys_msg = ""
+    for m in messages:
+        if m.get("role") == "system":
+            sys_msg += m.get("content", "")
+    s = sys_msg.lower()
+    if "search/replace" in s or "aider" in s:
+        return "aider"
+    if "hermes" in s:
+        return "hermes"
+    if "cline" in s or "roo" in s:
+        return "cline"
+    if "continue" in s:
+        return "continue"
+    return ""
+
+
+def _is_casual(text: str) -> bool:
+    """Detecta se a mensagem é conversa casual (não pedido de código)."""
+    t = text.lower().strip().rstrip("?!.")
+    palavras = t.split()
+    if len(palavras) > 6:
+        return False
+    casual = {"oi", "ola", "olá", "boa", "bom", "tarde", "noite", "dia", "manhã",
+              "tudo", "bem", "beleza", "eai", "fala", "obrigado", "valeu", "thanks"}
+    return all(p in casual for p in palavras)
+
+
+def _reforcar_system_prompt(messages: list, cli: str) -> list:
+    """Injeta instruções extras no system prompt pra ajudar modelos pequenos."""
+    # Pegar a última mensagem do user
+    last_user = ""
+    for m in reversed(messages):
+        if m.get("role") == "user":
+            last_user = m.get("content", "")
+            break
+
+    # Se é conversa casual, injetar instrução forte
+    if _is_casual(last_user):
+        reforco = (
+            "\n\nATENÇÃO: A mensagem do usuário é um CUMPRIMENTO casual. "
+            "Responda APENAS com texto normal tipo 'Boa tarde! Como posso ajudar com código hoje?'. "
+            "NÃO gere código. NÃO crie funções. NÃO mostre exemplos. Apenas cumprimente de volta."
+        )
+        for m in messages:
+            if m.get("role") == "system":
+                m["content"] += reforco
+                break
+
+    # Se é Aider, reforçar formato
+    if cli == "aider":
+        reforco = (
+            "\n\nIMPORTANTE: Se o usuário fizer um cumprimento casual (oi, boa tarde, etc), "
+            "responda APENAS com texto, sem código e sem blocos de código."
+        )
+        for m in messages:
+            if m.get("role") == "system":
+                m["content"] += reforco
+                break
+
+    return messages
+
+
 @app.get("/v1/models")
 @app.get("/v1/models/{model_id}")
 async def list_models(model_id: str = None):
@@ -1344,6 +1410,10 @@ async def chat_completions(req: ChatRequest, request: Request):
 
     messages = [{"role": m.role, "content": m.content} for m in req.messages]
     max_tokens = req.max_tokens or 2048
+
+    # Detectar CLI e reforçar instruções pro modelo
+    cli = _detectar_cli(messages)
+    messages = _reforcar_system_prompt(messages, cli)
 
     # Se modo "busca", injetar contexto web na última mensagem do user
     if manager.get_api_mode() == "busca" and messages:
