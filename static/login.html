@@ -1,30 +1,31 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" class="dark">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Tambaqui</title>
+<script src="https://unpkg.com/lucide@latest"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#09090b;color:#fafafa;min-height:100vh;display:flex;align-items:center;justify-content:center;background-image:radial-gradient(ellipse at top,#18181b 0%,#09090b 70%)}
-.card{background:#18181b;border:1px solid #27272a;border-radius:16px;padding:48px 40px;width:100%;max-width:400px;box-shadow:0 25px 50px -12px rgba(0,0,0,.5)}
-.logo{text-align:center;margin-bottom:32px}
-.logo h1{font-size:32px;font-weight:700;letter-spacing:-.02em}
-.logo h1 span{background:linear-gradient(135deg,#3b82f6,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.logo p{color:#71717a;font-size:14px;margin-top:6px}
-.field{margin-bottom:20px}
-.field label{display:block;font-size:13px;font-weight:500;color:#a1a1aa;margin-bottom:6px}
-.field input{width:100%;background:#09090b;border:1px solid #27272a;border-radius:10px;padding:12px 16px;color:#fafafa;font-size:15px;outline:none;transition:border .2s}
-.field input:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.15)}
-.btn{width:100%;padding:13px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;transition:opacity .2s;margin-top:8px}
+:root{--background:hsl(240 10% 3.9%);--foreground:hsl(0 0% 98%);--card:hsl(240 10% 3.9%);--card-fg:hsl(0 0% 98%);--muted:hsl(240 3.7% 15.9%);--muted-fg:hsl(240 5% 64.9%);--border:hsl(240 3.7% 15.9%);--input:hsl(240 3.7% 15.9%);--primary:hsl(0 0% 98%);--primary-fg:hsl(240 5.9% 10%);--secondary:hsl(240 3.7% 15.9%);--secondary-fg:hsl(0 0% 98%);--destructive:hsl(0 62.8% 30.6%);--ring:hsl(240 4.9% 83.9%);--radius:0.5rem}
+body{font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;background:var(--background);color:var(--foreground);min-height:100vh;display:flex;align-items:center;justify-content:center}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:2rem;width:100%;max-width:24rem;box-shadow:0 1px 2px 0 rgb(0 0 0/.05)}
+.card-header{text-align:center;margin-bottom:1.5rem}
+.card-header h1{font-size:1.5rem;font-weight:600;letter-spacing:-.025em;display:flex;align-items:center;justify-content:center;gap:.5rem}
+.card-header p{font-size:.875rem;color:var(--muted-fg);margin-top:.25rem}
+.field{margin-bottom:1rem}
+.field label{display:block;font-size:.875rem;font-weight:500;margin-bottom:.375rem}
+.field input{width:100%;height:2.5rem;background:var(--background);border:1px solid var(--input);border-radius:calc(var(--radius) - 2px);padding:0 .75rem;color:var(--foreground);font-size:.875rem;outline:none;transition:box-shadow .15s}
+.field input:focus{box-shadow:0 0 0 2px var(--background),0 0 0 4px var(--ring)}
+.btn{width:100%;height:2.5rem;background:var(--primary);color:var(--primary-fg);border:none;border-radius:calc(var(--radius) - 2px);font-size:.875rem;font-weight:500;cursor:pointer;transition:opacity .15s;margin-top:.5rem}
 .btn:hover{opacity:.9}
-.err{color:#ef4444;font-size:13px;text-align:center;margin-top:16px;display:none}
+.err{color:hsl(0 84.2% 60.2%);font-size:.875rem;text-align:center;margin-top:.75rem;display:none}
 </style>
 </head>
 <body>
 <div class="card">
-    <div class="logo">
-        <h1>🐟 <span>Tambaqui</span></h1>
-        <p>IA de código local</p>
+    <div class="card-header">
+        <h1><i data-lucide="fish" style="width:24px;height:24px"></i> Tambaqui</h1>
+        <p>Entre com seu usuário</p>
     </div>
     <div class="field"><label>Usuário</label><input id="user" autofocus onkeydown="if(event.key==='Enter')document.getElementById('pass').focus()"></div>
     <div class="field"><label>Senha</label><input id="pass" type="password" onkeydown="if(event.key==='Enter')login()"></div>
@@ -32,12 +33,13 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#09090b;c
     <div class="err" id="err"></div>
 </div>
 <script>
+lucide.createIcons();
 async function login(){
     const u=document.getElementById('user').value.trim(),p=document.getElementById('pass').value;
     if(!u||!p)return;
     const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,senha:p})});
     const d=await r.json();
-    if(d.ok){window.location.href='/'}
+    if(d.ok)window.location.href='/';
     else{const e=document.getElementById('err');e.textContent=d.erro||'Erro';e.style.display='block'}
 }
 </script>

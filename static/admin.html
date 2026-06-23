@@ -1,281 +1,264 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" class="dark">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Tambaqui Admin</title>
+<script src="https://unpkg.com/lucide@latest"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#09090b;--s1:#18181b;--s2:#1e1e22;--bd:#27272a;--bd2:#3f3f46;--tx:#fafafa;--t2:#a1a1aa;--t3:#71717a;--blue:#3b82f6;--purple:#8b5cf6;--green:#22c55e;--orange:#f59e0b;--red:#ef4444;--grad:linear-gradient(135deg,#3b82f6,#8b5cf6)}
-body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--tx)}
-.topbar{background:var(--s1);border-bottom:1px solid var(--bd);padding:14px 24px;display:flex;align-items:center;gap:14px}
-.topbar h1{font-size:18px;font-weight:600}.topbar h1 span{background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.topbar a{color:var(--t3);text-decoration:none;font-size:13px;padding:5px 14px;border:1px solid var(--bd);border-radius:8px;margin-left:auto;transition:all .15s}
-.topbar a:hover{color:var(--tx);border-color:var(--bd2)}
-.ct{max-width:900px;margin:24px auto;padding:0 20px}
-.card{background:var(--s1);border:1px solid var(--bd);border-radius:14px;padding:24px;margin-bottom:20px}
-.card h2{font-size:16px;margin-bottom:14px;font-weight:600;background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;display:inline-block}
-.card p.desc{font-size:13px;color:var(--t3);margin:-8px 0 14px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
-.stat{background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:14px;text-align:center}
-.stat .n{font-size:22px;font-weight:700;color:var(--blue)}.stat .l{font-size:11px;color:var(--t3);margin-top:3px}
-.btn{padding:8px 18px;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;margin:3px;transition:all .15s}
-.btn-blue{background:var(--blue);color:#fff}.btn-blue:hover{background:#2563eb}
-.btn-green{background:var(--green);color:#fff}.btn-green:hover{background:#16a34a}
-.btn-red{background:transparent;color:var(--red);border:1px solid rgba(239,68,68,.3)}.btn-red:hover{background:rgba(239,68,68,.1)}
-.btn-sm{padding:5px 12px;font-size:12px}
-.btn:disabled{opacity:.3;cursor:not-allowed}
-input[type=text],input[type=password],select{background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:9px 14px;color:var(--tx);font-size:13px;outline:none;transition:border .2s}
-input:focus,select:focus{border-color:var(--blue)}
-.ml{display:flex;flex-direction:column;gap:8px;margin-top:10px}
-.mi{display:flex;align-items:center;gap:12px;background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:12px 14px;transition:border .15s}
-.mi.act{border-color:var(--green)}
-.mi .nm{font-weight:600;flex:1;font-size:14px}.mi .nm small{font-weight:400;color:var(--t3);font-size:11px;display:block;margin-top:2px}
-.mi .mt{font-size:12px;color:var(--t3)}
-.badge{font-size:11px;padding:3px 10px;border-radius:6px;background:rgba(34,197,94,.15);color:var(--green);font-weight:600;border:1px solid rgba(34,197,94,.2)}
-.prog{height:4px;background:var(--bd);border-radius:2px;margin-top:6px;overflow:hidden}
-.prog .bar{height:100%;background:var(--blue);transition:width .3s;border-radius:2px}
-.sel-group{display:flex;gap:8px;flex-wrap:wrap}
-.sel-item{cursor:pointer;flex:1;min-width:200px;transition:all .15s}
-.sel-item:hover{border-color:var(--bd2)}
-.sel-item.act{border-color:var(--blue)}
-.sel-item .nm{font-size:13px}
-.api-box{background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:16px 20px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--t2);line-height:1.7}
-.api-box code{color:var(--blue)}
-.api-box table{width:100%;border-collapse:collapse;margin:8px 0}
-.api-box th,.api-box td{border:1px solid var(--bd);padding:8px 12px;text-align:left;font-size:13px}
-.api-box th{background:var(--s2);color:var(--tx);font-weight:500}
-details{margin-bottom:8px}
-details summary{cursor:pointer;font-weight:600;font-size:13px;padding:8px 0;color:var(--tx);transition:color .15s}
-details summary:hover{color:var(--blue)}
-details[open] summary{color:var(--blue)}
-details pre{background:var(--bg);padding:12px;margin:6px 0;border-radius:8px;font-size:12px;overflow-x:auto;border:1px solid var(--bd)}
-.toast{position:fixed;bottom:24px;right:24px;background:var(--green);color:#fff;padding:12px 24px;border-radius:10px;font-weight:600;display:none;z-index:99;box-shadow:0 10px 25px rgba(0,0,0,.3)}
-.form-row{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
+:root{--bg:hsl(240 10% 3.9%);--fg:hsl(0 0% 98%);--card:hsl(240 10% 3.9%);--muted:hsl(240 3.7% 15.9%);--muted-fg:hsl(240 5% 64.9%);--border:hsl(240 3.7% 15.9%);--input:hsl(240 3.7% 15.9%);--primary:hsl(0 0% 98%);--primary-fg:hsl(240 5.9% 10%);--secondary:hsl(240 3.7% 15.9%);--accent:hsl(240 3.7% 15.9%);--accent-fg:hsl(0 0% 98%);--destructive:hsl(0 62.8% 30.6%);--destructive-fg:hsl(0 0% 98%);--ring:hsl(240 4.9% 83.9%);--radius:.5rem;--blue:hsl(217.2 91.2% 59.8%);--green:hsl(142.1 76.2% 36.3%);--yellow:hsl(47.9 95.8% 53.1%);--red:hsl(0 84.2% 60.2%)}
+body{font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--fg)}
+
+/* Header */
+.header{border-bottom:1px solid var(--border);padding:0 1.5rem;display:flex;align-items:center;gap:.75rem;min-height:3.5rem}
+.header h1{font-size:.875rem;font-weight:600;display:flex;align-items:center;gap:.375rem}
+.header a{margin-left:auto;display:inline-flex;align-items:center;gap:.375rem;color:var(--muted-fg);text-decoration:none;font-size:.8125rem;padding:.375rem .75rem;border:1px solid var(--border);border-radius:calc(var(--radius) - 2px);transition:all .15s}
+.header a:hover{color:var(--fg);border-color:var(--muted-fg)}
+
+.container{max-width:56rem;margin:1.5rem auto;padding:0 1.5rem}
+
+/* Card - shadcn */
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;margin-bottom:1rem;box-shadow:0 1px 2px 0 rgb(0 0 0/.05)}
+.card-title{font-size:.875rem;font-weight:600;margin-bottom:.75rem;display:flex;align-items:center;gap:.375rem}
+.card-desc{font-size:.8125rem;color:var(--muted-fg);margin:-.375rem 0 .75rem}
+
+/* Stat grid */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(8rem,1fr));gap:.5rem}
+.stat{background:var(--muted);border:1px solid var(--border);border-radius:calc(var(--radius) - 2px);padding:.75rem;text-align:center}
+.stat-value{font-size:1.25rem;font-weight:700;font-variant-numeric:tabular-nums}
+.stat-label{font-size:.6875rem;color:var(--muted-fg);margin-top:.125rem}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.375rem;border-radius:calc(var(--radius) - 2px);font-size:.8125rem;font-weight:500;height:2rem;padding:0 .875rem;cursor:pointer;transition:all .15s;border:none;outline:none;white-space:nowrap}
+.btn:focus-visible{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--ring)}
+.btn-primary{background:var(--primary);color:var(--primary-fg)}.btn-primary:hover{opacity:.9}
+.btn-secondary{background:var(--secondary);color:var(--accent-fg)}.btn-secondary:hover{background:hsl(240 3.7% 20%)}
+.btn-destructive{background:var(--destructive);color:var(--destructive-fg)}.btn-destructive:hover{opacity:.9}
+.btn-outline{background:transparent;color:var(--fg);border:1px solid var(--input)}.btn-outline:hover{background:var(--accent);color:var(--accent-fg)}
+.btn-ghost{background:transparent;color:var(--muted-fg)}.btn-ghost:hover{background:var(--accent);color:var(--accent-fg)}
+.btn-sm{height:1.75rem;padding:0 .625rem;font-size:.75rem}
+.btn:disabled{opacity:.5;pointer-events:none}
+
+/* Badge */
+.badge{display:inline-flex;align-items:center;border-radius:9999px;padding:0 .5rem;font-size:.6875rem;font-weight:500;height:1.25rem}
+.badge-green{background:hsl(142.1 76.2% 36.3%/.15);color:var(--green);border:1px solid hsl(142.1 76.2% 36.3%/.3)}
+.badge-secondary{background:var(--secondary);color:var(--accent-fg);border:1px solid var(--border)}
+
+/* Input */
+input[type=text],input[type=password],select{height:2rem;background:var(--bg);border:1px solid var(--input);border-radius:calc(var(--radius) - 2px);padding:0 .75rem;color:var(--fg);font-size:.8125rem;outline:none;transition:box-shadow .15s}
+input:focus,select:focus{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--ring)}
+
+/* Item list */
+.item-list{display:flex;flex-direction:column;gap:.5rem}
+.item{display:flex;align-items:center;gap:.75rem;background:var(--muted);border:1px solid var(--border);border-radius:calc(var(--radius) - 2px);padding:.75rem 1rem;transition:border .15s}
+.item.active{border-color:var(--green)}
+.item-name{font-weight:500;font-size:.8125rem;flex:1}
+.item-name small{font-weight:400;color:var(--muted-fg);font-size:.6875rem;display:block;margin-top:1px}
+.item-meta{font-size:.75rem;color:var(--muted-fg)}
+
+/* Selectable group */
+.select-group{display:flex;gap:.5rem;flex-wrap:wrap}
+.select-item{cursor:pointer;flex:1;min-width:12rem;transition:all .15s}
+.select-item:hover{border-color:var(--muted-fg)}
+.select-item.active{border-color:var(--blue)}
+.select-item .item-name{font-size:.8125rem}
+
+/* Progress bar */
+.progress{height:.25rem;background:var(--border);border-radius:9999px;margin-top:.375rem;overflow:hidden}
+.progress-bar{height:100%;border-radius:9999px;transition:width .3s}
+
+/* Code box - shadcn style */
+.code-box{background:var(--muted);border:1px solid var(--border);border-radius:calc(var(--radius) - 2px);padding:1rem 1.25rem;font-family:ui-monospace,SFMono-Regular,monospace;font-size:.8125rem;color:var(--muted-fg);line-height:1.7}
+.code-box code{color:var(--blue)}
+.code-box table{width:100%;border-collapse:collapse;margin:.5rem 0}
+.code-box th,.code-box td{border:1px solid var(--border);padding:.5rem .75rem;text-align:left;font-size:.8125rem}
+.code-box th{background:var(--bg);color:var(--fg);font-weight:500}
+
+/* Details/Summary - shadcn accordion style */
+details{border:1px solid var(--border);border-radius:calc(var(--radius) - 2px);margin-bottom:.375rem}
+details summary{cursor:pointer;font-weight:500;font-size:.8125rem;padding:.625rem .875rem;color:var(--fg);transition:all .15s;display:flex;align-items:center;gap:.375rem}
+details summary:hover{background:var(--muted)}
+details summary::marker{content:''}
+details summary::before{content:'';display:inline-block;width:0;height:0;border-left:4px solid var(--muted-fg);border-top:3px solid transparent;border-bottom:3px solid transparent;transition:transform .15s;margin-right:.25rem}
+details[open] summary::before{transform:rotate(90deg)}
+details[open] summary{border-bottom:1px solid var(--border)}
+details .detail-content{padding:.75rem .875rem}
+details pre{background:var(--bg);padding:.75rem;margin:.375rem 0;border-radius:calc(var(--radius) - 4px);font-size:.75rem;overflow-x:auto;border:1px solid var(--border)}
+
+/* Form row */
+.form-row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+
+/* Toast */
+.toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--fg);color:var(--bg);padding:.75rem 1.5rem;border-radius:var(--radius);font-weight:500;font-size:.875rem;display:none;z-index:99;box-shadow:0 10px 15px -3px rgb(0 0 0/.3)}
+
+/* Separator */
+.separator{height:1px;background:var(--border);margin:.75rem 0}
 </style>
 </head>
 <body>
-<div class="topbar"><h1>🐟 <span>Tambaqui</span> Admin</h1><a href="/">← Chat</a></div>
-<div class="ct">
+<div class="header">
+    <h1><i data-lucide="fish" style="width:16px;height:16px"></i> Tambaqui Admin</h1>
+    <a href="/"><i data-lucide="arrow-left" style="width:14px;height:14px"></i> Chat</a>
+</div>
+<div class="container">
 
-<div class="card"><h2>Status</h2><div class="grid" id="sts"></div></div>
-<div class="card"><h2>Sistema</h2><div class="grid" id="sys"></div></div>
-<div class="card" id="gpuCard" style="display:none"><h2>GPU</h2><div class="grid" id="gpuStats"></div></div>
+<div class="card"><div class="card-title"><i data-lucide="activity" style="width:16px;height:16px"></i> Status</div><div class="stat-grid" id="sts"></div></div>
+<div class="card"><div class="card-title"><i data-lucide="cpu" style="width:16px;height:16px"></i> Sistema</div><div class="stat-grid" id="sys"></div></div>
+<div class="card" id="gpuCard" style="display:none"><div class="card-title"><i data-lucide="monitor" style="width:16px;height:16px"></i> GPU</div><div class="stat-grid" id="gpuStats"></div></div>
 
-<div class="card"><h2>Device (CPU/GPU)</h2>
-<p class="desc">Escolha onde rodar o modelo. GPU é ~10-50x mais rápido.</p>
-<div class="sel-group" id="deviceList"></div>
-<div id="deviceAviso" style="margin-top:10px;display:none">
-    <button class="btn btn-blue" onclick="recarregarModelo()">Recarregar modelo no novo device</button>
-    <span style="font-size:12px;color:var(--orange);margin-left:8px">Device trocado - precisa recarregar pra aplicar</span>
-</div></div>
+<div class="card"><div class="card-title"><i data-lucide="hard-drive" style="width:16px;height:16px"></i> Device</div>
+<p class="card-desc">Escolha onde rodar o modelo. GPU e ~10-50x mais rapido.</p>
+<div class="select-group" id="deviceList"></div>
+<div id="deviceAviso" style="margin-top:.5rem;display:none"><button class="btn btn-primary btn-sm" onclick="recarregarModelo()"><i data-lucide="refresh-cw" style="width:12px;height:12px"></i> Recarregar no novo device</button></div></div>
 
-<div class="card"><h2>Economia de Energia</h2>
-<p class="desc">Controle como o modelo usa memória quando idle.</p>
-<h3 style="font-size:13px;color:var(--t2);margin:10px 0 6px">Pre-carregar na inicialização</h3>
-<div class="sel-group" id="preloadList"></div>
-<h3 style="font-size:13px;color:var(--t2);margin:14px 0 6px">Idle timeout</h3>
-<div class="sel-group" id="idleList"></div></div>
+<div class="card"><div class="card-title"><i data-lucide="battery-charging" style="width:16px;height:16px"></i> Energia</div>
+<p class="card-desc">Controle como o modelo usa memoria quando idle.</p>
+<div style="font-size:.75rem;font-weight:500;color:var(--muted-fg);margin-bottom:.375rem">Pre-carregar</div>
+<div class="select-group" id="preloadList"></div>
+<div style="font-size:.75rem;font-weight:500;color:var(--muted-fg);margin:.75rem 0 .375rem">Idle timeout</div>
+<div class="select-group" id="idleList"></div></div>
 
-<div class="card"><h2>Modo da API</h2>
-<p class="desc">Como <code>/v1/chat/completions</code> responde pra CLIs externos.</p>
-<div class="sel-group" id="modoList"></div></div>
+<div class="card"><div class="card-title"><i data-lucide="settings-2" style="width:16px;height:16px"></i> Modo da API</div>
+<p class="card-desc">Como <code style="background:var(--muted);padding:.0625rem .375rem;border-radius:calc(var(--radius) - 4px);font-size:.75rem">/v1/chat/completions</code> responde.</p>
+<div class="select-group" id="modoList"></div></div>
 
-<div class="card"><h2>Modelos Baixados</h2><div class="ml" id="locais"></div></div>
+<div class="card"><div class="card-title"><i data-lucide="box" style="width:16px;height:16px"></i> Modelos Baixados</div><div class="item-list" id="locais"></div></div>
+<div class="card"><div class="card-title"><i data-lucide="download" style="width:16px;height:16px"></i> Baixar Modelo</div><p class="card-desc">Modelos de codigo do HuggingFace.</p><div class="item-list" id="catalogo"></div></div>
 
-<div class="card"><h2>Baixar Modelo</h2>
-<p class="desc">Modelos de código do HuggingFace. Menores rodam em PCs fracos.</p>
-<div class="ml" id="catalogo"></div></div>
-
-<div class="card" id="usersCard" style="display:none"><h2>Usuários</h2><div class="ml" id="userList"></div>
-<div class="form-row">
-    <input type="text" id="newUser" placeholder="Usuário">
+<div class="card" id="usersCard" style="display:none"><div class="card-title"><i data-lucide="users" style="width:16px;height:16px"></i> Usuarios</div><div class="item-list" id="userList"></div>
+<div class="form-row" style="margin-top:.75rem">
+    <input type="text" id="newUser" placeholder="Usuario">
     <input type="password" id="newPass" placeholder="Senha">
-    <label style="font-size:12px;color:var(--t3)"><input type="checkbox" id="newAdmin"> Admin</label>
-    <button class="btn btn-green btn-sm" onclick="criarUser()">Criar</button>
+    <label style="font-size:.75rem;color:var(--muted-fg);display:flex;align-items:center;gap:.25rem"><input type="checkbox" id="newAdmin"> Admin</label>
+    <button class="btn btn-primary btn-sm" onclick="criarUser()"><i data-lucide="plus" style="width:12px;height:12px"></i> Criar</button>
 </div></div>
 
-<div class="card"><h2>Sua API Key</h2><div class="api-box" id="apiKeyInfo">Carregando...</div>
-<button class="btn btn-blue" onclick="regenKey()" style="margin-top:12px">Regenerar Key</button></div>
+<div class="card"><div class="card-title"><i data-lucide="key" style="width:16px;height:16px"></i> API Key</div><div class="code-box" id="apiKeyInfo">Carregando...</div>
+<button class="btn btn-outline btn-sm" onclick="regenKey()" style="margin-top:.75rem"><i data-lucide="refresh-cw" style="width:12px;height:12px"></i> Regenerar</button></div>
 
-<div class="card"><h2>Como Conectar</h2><div class="api-box" id="connectInfo">Carregando...</div></div>
+<div class="card"><div class="card-title"><i data-lucide="plug" style="width:16px;height:16px"></i> Como Conectar</div><div id="connectInfo">Carregando...</div></div>
 
 </div>
 <div class="toast" id="toast"></div>
 <script>
-function toast(m,c){const t=document.getElementById('toast');t.textContent=m;t.style.background=c||'var(--green)';t.style.display='block';setTimeout(()=>t.style.display='none',3000)}
-function bc(p){return p>80?'var(--red)':p>60?'var(--orange)':'var(--green)'}
+lucide.createIcons();
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',3000)}
+function bc(p){return p>80?'var(--red)':p>60?'var(--yellow)':'var(--green)'}
 
 async function load(){
     const r=await fetch('/api/status'),d=await r.json();
     document.getElementById('sts').innerHTML=`
-        <div class="stat"><div class="n" style="font-size:15px">${d.modelo_ativo||'—'}</div><div class="l">Modelo</div></div>
-        <div class="stat"><div class="n" style="color:${d.pronto?'var(--green)':'var(--red)'}">${d.pronto?'Online':'Off'}</div><div class="l">Status</div></div>
-        <div class="stat"><div class="n" style="font-size:15px">${d.device||'—'}</div><div class="l">Device</div></div>
-        <div class="stat"><div class="n" style="color:${d.warmup?'var(--green)':'var(--t3)'}">${d.warmup?'Quente':'Frio'}</div><div class="l">Pre-load</div></div>
-        <div class="stat"><div class="n" style="color:${d.carregando?'var(--orange)':'var(--t3)'}">${d.carregando?'Sim':'—'}</div><div class="l">Carregando</div></div>
-    `;
+        <div class="stat"><div class="stat-value" style="font-size:.9375rem">${d.modelo_ativo||'—'}</div><div class="stat-label">Modelo</div></div>
+        <div class="stat"><div class="stat-value" style="color:${d.pronto?'var(--green)':'var(--red)'}">${d.pronto?'Online':'Off'}</div><div class="stat-label">Status</div></div>
+        <div class="stat"><div class="stat-value" style="font-size:.9375rem">${d.device||'—'}</div><div class="stat-label">Device</div></div>
+        <div class="stat"><div class="stat-value" style="color:${d.warmup?'var(--green)':'var(--muted-fg)'}">${d.warmup?'Quente':'Frio'}</div><div class="stat-label">Pre-load</div></div>
+        <div class="stat"><div class="stat-value" style="color:${d.carregando?'var(--yellow)':'var(--muted-fg)'}">${d.carregando?'Sim':'—'}</div><div class="stat-label">Carregando</div></div>`;
     document.getElementById('sys').innerHTML=`
-        <div class="stat"><div class="n" style="color:${bc(d.cpu_percent||0)}">${d.cpu_percent||0}%</div><div class="l">CPU (${d.cpu_count} cores)</div></div>
-        <div class="stat"><div class="n" style="color:${bc(d.ram_percent||0)}">${d.ram_percent||0}%</div><div class="l">RAM ${d.ram_usada_gb||0}/${d.ram_total_gb||0}G</div></div>
-        <div class="stat"><div class="n">${d.proc_ram_mb||0}MB</div><div class="l">Processo</div></div>
-        <div class="stat"><div class="n" style="font-size:14px">${d.platform||''}</div><div class="l">Py ${d.python||''}</div></div>
-    `;
-    // GPU
+        <div class="stat"><div class="stat-value" style="color:${bc(d.cpu_percent||0)}">${d.cpu_percent||0}%</div><div class="stat-label">CPU (${d.cpu_count})</div></div>
+        <div class="stat"><div class="stat-value" style="color:${bc(d.ram_percent||0)}">${d.ram_percent||0}%</div><div class="stat-label">RAM ${d.ram_usada_gb||0}/${d.ram_total_gb||0}G</div></div>
+        <div class="stat"><div class="stat-value">${d.proc_ram_mb||0}MB</div><div class="stat-label">Processo</div></div>
+        <div class="stat"><div class="stat-value" style="font-size:.875rem">${d.platform||''}</div><div class="stat-label">Py ${d.python||''}</div></div>`;
     const gc=document.getElementById('gpuCard'),gs=document.getElementById('gpuStats');
-    if(d.gpus&&d.gpus.length){
-        gc.style.display='block';
-        gs.innerHTML=d.gpus.map(g=>{
-            if(g.tipo==='cuda'){
-                return`<div class="stat"><div class="n" style="color:${bc(g.vram_percent)}">${g.vram_percent}%</div><div class="l">${g.nome}</div></div>
-                <div class="stat"><div class="n">${g.vram_usada_gb}/${g.vram_total_gb}G</div><div class="l">VRAM Usada</div></div>
-                <div class="stat"><div class="n">${g.vram_reservada_gb}G</div><div class="l">VRAM Reservada</div></div>`}
-            else{
-                return`<div class="stat"><div class="n" style="color:var(--blue)">${g.vram_usada_gb}G</div><div class="l">${g.nome}</div></div>
-                <div class="stat"><div class="n" style="font-size:14px">Metal</div><div class="l">Memória compartilhada</div></div>`}
-        }).join('')}
-    else{gc.style.display='none'}
+    if(d.gpus&&d.gpus.length){gc.style.display='block';
+        gs.innerHTML=d.gpus.map(g=>g.tipo==='cuda'?
+            `<div class="stat"><div class="stat-value" style="color:${bc(g.vram_percent)}">${g.vram_percent}%</div><div class="stat-label">${g.nome}</div></div><div class="stat"><div class="stat-value">${g.vram_usada_gb}/${g.vram_total_gb}G</div><div class="stat-label">VRAM</div></div>`:
+            `<div class="stat"><div class="stat-value" style="color:var(--blue)">${g.vram_usada_gb}G</div><div class="stat-label">${g.nome}</div></div>`).join('')}else{gc.style.display='none'}
+
     const r2=await fetch('/api/modelos'),d2=await r2.json();
-    const loc=document.getElementById('locais');
-    if(!d2.locais.length){loc.innerHTML='<p style="color:var(--t3);font-size:13px">Nenhum modelo baixado</p>'}
-    else{loc.innerHTML=d2.locais.map(m=>`<div class="mi ${m.ativo?'act':''}">
-        <div class="nm">${m.nome} ${m.ativo?'<span class="badge">ativo</span>':''}<small>${m.tamanho_gb} GB</small></div>
-        ${!m.ativo?`<button class="btn btn-blue btn-sm" onclick="carregar('${m.nome}')">Carregar</button>`:''}
-        ${!m.ativo?`<button class="btn btn-red btn-sm" onclick="deletar('${m.nome}')">Remover</button>`:''}
-        ${m.ativo?`<button class="btn btn-red btn-sm" onclick="descarregar()">Descarregar</button>`:''}
-    </div>`).join('')}
-    const cat=document.getElementById('catalogo');
-    cat.innerHTML=d2.catalogo.map(m=>{
-        const dl=d.downloads&&d.downloads[m.nome];
-        const baixando=dl||m.baixando;
+    document.getElementById('locais').innerHTML=!d2.locais.length?'<p style="color:var(--muted-fg);font-size:.8125rem">Nenhum modelo baixado</p>':
+        d2.locais.map(m=>`<div class="item ${m.ativo?'active':''}">
+            <div class="item-name">${m.nome} ${m.ativo?'<span class="badge badge-green">ativo</span>':''}<small>${m.tamanho_gb} GB</small></div>
+            ${!m.ativo?`<button class="btn btn-primary btn-sm" onclick="carregar('${m.nome}')">Carregar</button>`:''}
+            ${!m.ativo?`<button class="btn btn-ghost btn-sm" onclick="deletar('${m.nome}')"><i data-lucide="trash-2" style="width:12px;height:12px"></i></button>`:''}
+            ${m.ativo?`<button class="btn btn-outline btn-sm" onclick="descarregar()">Descarregar</button>`:''}
+        </div>`).join('');
+    document.getElementById('catalogo').innerHTML=d2.catalogo.map(m=>{
+        const dl=d.downloads&&d.downloads[m.nome];const baixando=dl||m.baixando;
         let btn='',prog='';
-        if(m.baixado&&!baixando){btn='<span class="badge">Baixado</span>'}
-        else if(baixando){
-            const pct=dl?dl.percent||0:0;const cor=pct<0?'var(--red)':pct>=100?'var(--green)':'var(--blue)';
-            const arq=dl?dl.arquivo||'':'iniciando...';const vel=dl?dl.velocidade||'':'';const st=dl?dl.status||'':'baixando';
-            btn=`<span style="color:var(--orange);font-size:12px;font-weight:600">${pct>=0?pct+'%':st}</span>`;
-            prog=`<div style="margin-top:6px"><div class="prog"><div class="bar" style="width:${Math.max(pct,2)}%;background:${cor}"></div></div><div style="font-size:10px;color:var(--t3);margin-top:3px">${arq} ${vel?'· '+vel:''}</div></div>`}
-        else{btn=`<button class="btn btn-green btn-sm" onclick="baixar('${m.nome}')">Baixar</button>`}
-        return`<div class="mi" style="flex-wrap:wrap"><div class="nm">${m.nome}<small>${m.desc} · ${m.params} · ${m.ram} RAM</small></div>${btn}${prog?`<div style="width:100%">${prog}</div>`:''}</div>`}).join('');
-}
-let downloadPolling=null;
-async function baixar(n){
-    const r=await fetch('/api/modelos/baixar?nome='+n,{method:'POST'});
-    const d=await r.json();
-    toast(d.status||'Download iniciado');
-    if(d.status==='Modelo já existe'){load();return}
-    // Polling rápido durante download
-    if(downloadPolling)clearInterval(downloadPolling);
-    // Primeiro poll após 1s (dar tempo da thread iniciar)
-    setTimeout(load,1000);
-    downloadPolling=setInterval(async()=>{
-        await load();
-        const r2=await fetch('/api/status');const d2=await r2.json();
-        if(!d2.downloads||Object.keys(d2.downloads).length===0){
-            clearInterval(downloadPolling);downloadPolling=null;
-            toast('Download concluído!');load();
-        }
-    },2000);
-}
+        if(m.baixado&&!baixando){btn='<span class="badge badge-green">Baixado</span>'}
+        else if(baixando){const pct=dl?dl.percent||0:0;const cor=pct<0?'var(--red)':pct>=100?'var(--green)':'var(--blue)';
+            btn=`<span style="color:var(--yellow);font-size:.75rem;font-weight:500">${pct>=0?pct+'%':dl?dl.status:'...'}</span>`;
+            prog=`<div style="width:100%;margin-top:.25rem"><div class="progress"><div class="progress-bar" style="width:${Math.max(pct,2)}%;background:${cor}"></div></div><div style="font-size:.625rem;color:var(--muted-fg);margin-top:.125rem">${dl?dl.arquivo||'':''} ${dl&&dl.velocidade?'· '+dl.velocidade:''}</div></div>`}
+        else{btn=`<button class="btn btn-primary btn-sm" onclick="baixar('${m.nome}')"><i data-lucide="download" style="width:12px;height:12px"></i> Baixar</button>`}
+        return`<div class="item" style="flex-wrap:wrap"><div class="item-name">${m.nome}<small>${m.desc} · ${m.params} · ${m.ram} RAM</small></div>${btn}${prog||''}</div>`}).join('');
+    lucide.createIcons()}
+
+let dlPoll=null;
+async function baixar(n){const r=await fetch('/api/modelos/baixar?nome='+n,{method:'POST'});const d=await r.json();toast(d.status||'Download iniciado');
+    if(d.status==='Modelo já existe'){load();return}setTimeout(load,1000);
+    if(dlPoll)clearInterval(dlPoll);dlPoll=setInterval(async()=>{await load();const r2=await fetch('/api/status');const d2=await r2.json();
+        if(!d2.downloads||Object.keys(d2.downloads).length===0){clearInterval(dlPoll);dlPoll=null;toast('Download concluido!');load()}},2000)}
 async function carregar(n){await fetch('/api/modelos/carregar?nome='+n,{method:'POST'});toast('Carregando...');setTimeout(load,3000)}
 async function descarregar(){await fetch('/api/modelos/descarregar',{method:'POST'});toast('Descarregado');load()}
 async function deletar(n){if(!confirm('Remover '+n+'?'))return;await fetch('/api/modelos/'+n,{method:'DELETE'});toast('Removido');load()}
-async function recarregarModelo(){
-    // Descarrega e recarrega no novo device
-    const r=await fetch('/api/status');const d=await r.json();
-    if(!d.modelo_ativo){toast('Nenhum modelo ativo','var(--red)');return}
-    toast('Recarregando no novo device...');
-    await fetch('/api/modelos/descarregar',{method:'POST'});
-    await fetch('/api/modelos/carregar?nome='+d.modelo_ativo,{method:'POST'});
-    document.getElementById('deviceAviso').style.display='none';
-    setTimeout(load,3000);
-}
+async function recarregarModelo(){const r=await fetch('/api/status');const d=await r.json();if(!d.modelo_ativo)return;
+    toast('Recarregando...');await fetch('/api/modelos/descarregar',{method:'POST'});await fetch('/api/modelos/carregar?nome='+d.modelo_ativo,{method:'POST'});
+    document.getElementById('deviceAviso').style.display='none';setTimeout(load,3000)}
 
 async function loadDevices(){try{const r=await fetch('/api/devices');const d=await r.json();
-    document.getElementById('deviceList').innerHTML=d.devices.map(dv=>`<div class="mi sel-item ${dv.id===d.atual?'act':''}" onclick="setDevice('${dv.id}')"><div class="nm">${dv.id===d.atual?'●':'○'} ${dv.nome}<small>${dv.info}</small></div></div>`).join('')}catch(e){}}
+    document.getElementById('deviceList').innerHTML=d.devices.map(dv=>`<div class="item select-item ${dv.id===d.atual?'active':''}" onclick="setDevice('${dv.id}')">
+        <div class="item-name">${dv.id===d.atual?'●':'○'} ${dv.nome}<small>${dv.info}</small></div></div>`).join('');lucide.createIcons()}catch(e){}}
 async function setDevice(id){await fetch('/api/devices?device='+id,{method:'POST'});document.getElementById('deviceAviso').style.display='block';toast('Device: '+id);loadDevices();load()}
 
-async function loadPreload(){
-    try{
-        const r=await fetch('/api/preload');const d=await r.json();const cur=d.preload;
-        document.getElementById('preloadList').innerHTML=[
-            {v:false,l:'Desligado',d:'Inicia leve. Carregue manualmente pelo admin.'},
-            {v:true,l:'Ligado',d:'Carrega o modelo ao iniciar o servidor.'}
-        ].map(o=>{const sel=(o.v===cur);
-            return`<div class="mi sel-item ${sel?'act':''}" onclick="setPreload(${o.v})" style="flex:1;min-width:200px">
-                <div class="nm">${sel?'●':'○'} ${o.l}<small>${o.d}</small></div></div>`}).join('')
-    }catch(e){}}
-async function setPreload(v){
-    await fetch('/api/preload?enabled='+v,{method:'POST'});
-    toast(v?'Pre-carregar ativado':'Pre-carregar desativado');loadPreload()}
+async function loadPreload(){try{const r=await fetch('/api/preload');const d=await r.json();const cur=d.preload;
+    document.getElementById('preloadList').innerHTML=[{v:false,l:'Desligado',d:'Inicia leve. Admin carrega.'},{v:true,l:'Ligado',d:'Carrega ao iniciar.'}].map(o=>{const sel=(o.v===cur);
+        return`<div class="item select-item ${sel?'active':''}" onclick="setPreload(${o.v})" style="flex:1;min-width:12rem"><div class="item-name">${sel?'●':'○'} ${o.l}<small>${o.d}</small></div></div>`}).join('')}catch(e){}}
+async function setPreload(v){await fetch('/api/preload?enabled='+v,{method:'POST'});toast(v?'Pre-carregar ativado':'Desativado');loadPreload()}
 
 async function loadIdle(){try{const r=await fetch('/api/idle');const d=await r.json();const cur=d.idle_timeout_min;
-    document.getElementById('idleList').innerHTML=[{v:0,l:'Sempre ligado',d:'Modelo na RAM 24/7'},{v:5,l:'5 min',d:'Idle → descarrega'},{v:15,l:'15 min',d:'Idle → descarrega'},{v:30,l:'30 min',d:'Idle → descarrega'},{v:60,l:'1 hora',d:'Idle → descarrega'}].map(o=>
-        `<div class="mi sel-item ${o.v===cur?'act':''}" onclick="setIdle(${o.v})"><div class="nm">${o.v===cur?'●':'○'} ${o.l}<small>${o.d}</small></div></div>`).join('')}catch(e){}}
+    document.getElementById('idleList').innerHTML=[{v:0,l:'Sempre ligado'},{v:5,l:'5 min'},{v:15,l:'15 min'},{v:30,l:'30 min'},{v:60,l:'1 hora'}].map(o=>{const sel=o.v===cur;
+        return`<div class="item select-item ${sel?'active':''}" onclick="setIdle(${o.v})" style="flex:1;min-width:6rem"><div class="item-name">${sel?'●':'○'} ${o.l}</div></div>`}).join('')}catch(e){}}
 async function setIdle(m){await fetch('/api/idle?minutes='+m,{method:'POST'});toast(m?'Idle: '+m+' min':'Sempre ligado');loadIdle()}
 
 async function loadModo(){try{const r=await fetch('/api/mode');const d=await r.json();const modo=d.mode;
-    document.getElementById('modoList').innerHTML=[
-        {id:'direto',l:'Só Modelo',d:'Rápido. Ideal pra Hermes, Aider, Cline.'},
-        {id:'busca',l:'Modelo + Busca Web',d:'Pesquisa antes de responder. Mais lento.'}
-    ].map(m=>`<div class="mi sel-item ${m.id===modo?'act':''}" onclick="setModo('${m.id}')"><div class="nm">${m.id===modo?'●':'○'} ${m.l}<small>${m.d}</small></div></div>`).join('')}catch(e){}}
+    document.getElementById('modoList').innerHTML=[{id:'direto',l:'So Modelo',d:'Rapido. Ideal pra CLIs.'},{id:'busca',l:'Modelo + Busca',d:'Pesquisa antes.'}].map(m=>{const sel=m.id===modo;
+        return`<div class="item select-item ${sel?'active':''}" onclick="setModo('${m.id}')" style="flex:1"><div class="item-name">${sel?'●':'○'} ${m.l}<small>${m.d}</small></div></div>`}).join('')}catch(e){}}
 async function setModo(m){await fetch('/api/mode?mode='+m,{method:'POST'});toast('Modo: '+m);loadModo()}
 
 async function loadUsers(){try{const r=await fetch('/api/auth/users');if(r.status===403)return;const d=await r.json();
-    document.getElementById('usersCard').style.display='block';const el=document.getElementById('userList');
-    if(!d.users||!d.users.length){el.innerHTML='<p style="color:var(--t3);font-size:13px">Nenhum</p>';return}
-    el.innerHTML=d.users.map(u=>`<div class="mi" style="flex-wrap:wrap">
-        <div class="nm">${u.username} ${u.admin?'<span class="badge">admin</span>':''}</div>
-        <button class="btn btn-blue btn-sm" onclick="trocarSenha('${u.username}')">Senha</button>
-        <button class="btn btn-red btn-sm" onclick="deletarUser('${u.username}')">✕</button>
-        <div style="width:100%;margin-top:4px;font-size:11px;color:var(--t3)">Key: <code style="user-select:all">${u.api_key||'—'}</code></div>
-    </div>`).join('')}catch(e){}}
+    document.getElementById('usersCard').style.display='block';
+    document.getElementById('userList').innerHTML=!d.users||!d.users.length?'':d.users.map(u=>`<div class="item" style="flex-wrap:wrap">
+        <div class="item-name">${u.username} ${u.admin?'<span class="badge badge-green">admin</span>':''}</div>
+        <button class="btn btn-outline btn-sm" onclick="trocarSenha('${u.username}')">Senha</button>
+        <button class="btn btn-ghost btn-sm" onclick="deletarUser('${u.username}')"><i data-lucide="trash-2" style="width:12px;height:12px"></i></button>
+        <div style="width:100%;font-size:.6875rem;color:var(--muted-fg);margin-top:.25rem;font-family:ui-monospace,monospace">Key: ${u.api_key||'—'}</div>
+    </div>`).join('');lucide.createIcons()}catch(e){}}
 async function criarUser(){const u=document.getElementById('newUser').value.trim(),p=document.getElementById('newPass').value,a=document.getElementById('newAdmin').checked;
-    if(!u||!p){toast('Preencha tudo','var(--red)');return}
-    const r=await fetch('/api/auth/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,senha:p,admin:a})});const d=await r.json();
-    if(d.ok){toast('Criado');document.getElementById('newUser').value='';document.getElementById('newPass').value=''}else toast(d.erro,'var(--red)');loadUsers()}
-async function trocarSenha(u){const s=prompt('Nova senha para '+u+':');if(!s)return;
-    await fetch('/api/auth/trocar-senha',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,nova_senha:s})});toast('Senha alterada')}
+    if(!u||!p){toast('Preencha tudo');return}const r=await fetch('/api/auth/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,senha:p,admin:a})});
+    const d=await r.json();if(d.ok){toast('Criado');document.getElementById('newUser').value='';document.getElementById('newPass').value=''}else toast(d.erro);loadUsers()}
+async function trocarSenha(u){const s=prompt('Nova senha para '+u+':');if(!s)return;await fetch('/api/auth/trocar-senha',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,nova_senha:s})});toast('Senha alterada')}
 async function deletarUser(u){if(!confirm('Deletar '+u+'?'))return;await fetch('/api/auth/users/'+u,{method:'DELETE'});toast('Deletado');loadUsers()}
 
 async function loadApiKey(){try{const r=await fetch('/api/auth/api-key');if(r.status!==200)return;const d=await r.json();
     const base=d.base_url||`${location.origin}/v1`,key=d.api_key,modelo=d.model||'';
     document.getElementById('apiKeyInfo').innerHTML=`
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
             <code style="flex:1;user-select:all">${key}</code>
-            <button class="btn btn-blue btn-sm" onclick="navigator.clipboard.writeText('${key}');this.textContent='✓'">Copiar</button>
+            <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${key}');this.textContent='Copiado'">Copiar</button>
         </div>
-        <p style="margin-top:6px;font-size:12px;color:var(--t3)">User: ${d.username} · Modelo: ${modelo||'—'}</p>`;
+        <p style="margin-top:.375rem;font-size:.75rem">User: ${d.username} · Modelo: ${modelo||'—'}</p>`;
     document.getElementById('connectInfo').innerHTML=`
-        <h3 style="color:var(--blue);font-size:14px;margin-bottom:10px">Copie esses valores</h3>
-        <table><tr><td style="color:var(--t3);width:100px">Base URL</td><td><code style="user-select:all">${base}</code></td></tr>
-        <tr><td style="color:var(--t3)">API Key</td><td><code style="user-select:all">${key}</code></td></tr>
-        ${modelo?`<tr><td style="color:var(--t3)">Model</td><td><code style="user-select:all">${modelo}</code></td></tr>`:''}</table>
-
-        <details open><summary style="color:var(--orange)">Hermes CLI</summary>
-        <p style="font-size:12px;color:var(--t3);padding:4px 0">Edite <code>~/.hermes/config.yaml</code>:</p>
-        <pre><code>model:\n  default: ${modelo||'*'}\n  provider: custom\n  base_url: ${base}\n  api_key: ${key}</code></pre></details>
-
-        <details><summary>Terminal (env vars)</summary>
-        <pre><code>export OPENAI_API_BASE=${base}\nexport OPENAI_API_KEY=${key}</code></pre></details>
-
-        <details><summary>Continue.dev (VS Code)</summary>
-        <pre><code>{\n  "models": [{\n    "title": "Tambaqui",\n    "provider": "openai",\n    "model": "${modelo||'*'}",\n    "apiBase": "${base}",\n    "apiKey": "${key}"\n  }]\n}</code></pre></details>
-
-        <details><summary>Aider</summary>
-        <pre><code>aider --openai-api-base ${base} \\\\\n  --openai-api-key ${key} \\\\\n  --model openai/${modelo||'*'}</code></pre></details>
-
-        <details><summary>Cline (VS Code)</summary>
-        <p style="font-size:12px;color:var(--t3);padding:4px 0">Settings → Cline → API Provider: OpenAI Compatible<br>Base URL: <code>${base}</code> · Key: <code>${key}</code> · Model: <code>${modelo||'*'}</code></p></details>
-
-        <details><summary>curl</summary>
-        <pre><code>curl ${base}/chat/completions \\\\\n  -H "Content-Type: application/json" \\\\\n  -H "Authorization: Bearer ${key}" \\\\\n  -d '{"model":"${modelo||'*'}","messages":[{"role":"user","content":"oi"}]}'</code></pre></details>
-
-        <details><summary>Python</summary>
-        <pre><code>from openai import OpenAI\nclient = OpenAI(base_url="${base}", api_key="${key}")\nresp = client.chat.completions.create(\n    model="${modelo||'*'}",\n    messages=[{"role":"user","content":"olá"}]\n)\nprint(resp.choices[0].message.content)</code></pre></details>
-    `}catch(e){}}
+        <div class="code-box" style="margin-bottom:.75rem">
+            <table><tr><td style="color:var(--muted-fg);width:5rem">Base URL</td><td><code style="user-select:all">${base}</code></td></tr>
+            <tr><td style="color:var(--muted-fg)">API Key</td><td><code style="user-select:all">${key}</code></td></tr>
+            ${modelo?`<tr><td style="color:var(--muted-fg)">Model</td><td><code style="user-select:all">${modelo}</code></td></tr>`:''}</table>
+        </div>
+        <details open><summary><i data-lucide="terminal" style="width:14px;height:14px"></i> Hermes CLI</summary><div class="detail-content">
+            <pre><code>model:\n  default: ${modelo||'*'}\n  provider: custom\n  base_url: ${base}\n  api_key: ${key}</code></pre></div></details>
+        <details><summary><i data-lucide="terminal" style="width:14px;height:14px"></i> Terminal</summary><div class="detail-content">
+            <pre><code>export OPENAI_API_BASE=${base}\nexport OPENAI_API_KEY=${key}</code></pre></div></details>
+        <details><summary><i data-lucide="code" style="width:14px;height:14px"></i> Continue.dev</summary><div class="detail-content">
+            <pre><code>{\n  "models": [{"title":"Tambaqui","provider":"openai","model":"${modelo||'*'}","apiBase":"${base}","apiKey":"${key}"}]\n}</code></pre></div></details>
+        <details><summary><i data-lucide="terminal" style="width:14px;height:14px"></i> Aider</summary><div class="detail-content">
+            <pre><code>aider --openai-api-base ${base} --openai-api-key ${key} --model openai/${modelo||'*'}</code></pre></div></details>
+        <details><summary><i data-lucide="code" style="width:14px;height:14px"></i> curl</summary><div class="detail-content">
+            <pre><code>curl ${base}/chat/completions \\\n  -H "Authorization: Bearer ${key}" \\\n  -d '{"model":"${modelo||'*'}","messages":[{"role":"user","content":"oi"}]}'</code></pre></div></details>
+        <details><summary><i data-lucide="code" style="width:14px;height:14px"></i> Python</summary><div class="detail-content">
+            <pre><code>from openai import OpenAI\nclient = OpenAI(base_url="${base}", api_key="${key}")\nresp = client.chat.completions.create(model="${modelo||'*'}", messages=[{"role":"user","content":"ola"}])\nprint(resp.choices[0].message.content)</code></pre></div></details>`;
+    lucide.createIcons()}catch(e){}}
 async function regenKey(){if(!confirm('Regenerar? A key anterior para de funcionar.'))return;await fetch('/api/auth/api-key/regenerar',{method:'POST'});toast('Key regenerada');loadApiKey()}
 
 load();loadUsers();loadApiKey();loadDevices();loadPreload();loadIdle();loadModo();
-setInterval(()=>{load()},2000);
+setInterval(load,2000);
 </script>
 </body></html>
