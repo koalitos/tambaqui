@@ -262,6 +262,19 @@ def _auth_ativo() -> bool:
 # ============================================================
 
 
+CONFIG_FILE = DADOS_DIR / "config.json"
+
+
+def _carregar_config() -> dict:
+    if CONFIG_FILE.exists():
+        return json.loads(CONFIG_FILE.read_text())
+    return {}
+
+
+def _salvar_config(cfg: dict):
+    CONFIG_FILE.write_text(json.dumps(cfg, indent=2))
+
+
 class ModelManager:
     """Gerencia download, carregamento e inferência de modelos HuggingFace."""
 
@@ -269,10 +282,48 @@ class ModelManager:
         self.model = None
         self.tokenizer = None
         self.modelo_ativo: Optional[str] = None
+        self.device_atual: str = "auto"
+        self.device_nome: str = ""  # cpu, cuda, mps
         self.carregando = False
-        self.progresso_download = {}  # {modelo: progresso}
+        self.progresso_download = {}
         self.warmup_done = False
         self._lock = threading.Lock()
+
+        # Carregar config salva
+        cfg = _carregar_config()
+        self.device_atual = cfg.get("device", "auto")
+
+    def detectar_devices(self) -> list:
+        """Lista devices disponíveis na máquina."""
+        devices = [{"id": "cpu", "nome": "CPU", "disponivel": True, "info": f"{os.cpu_count()} cores"}]
+
+        try:
+            import torch
+            if torch.cuda.is_available():
+                for i in range(torch.cuda.device_count()):
+                    props = torch.cuda.get_device_properties(i)
+                    mem_gb = round(props.total_mem / (1024**3), 1)
+                    devices.append({
+                        "id": f"cuda:{i}" if i > 0 else "cuda",
+                        "nome": f"GPU NVIDIA: {props.name}",
+                        "disponivel": True,
+                        "info": f"{mem_gb} GB VRAM",
+                    })
+            if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                devices.append({"id": "mps", "nome": "GPU Apple (MPS)", "disponivel": True, "info": "Metal"})
+        except Exception:
+            pass
+
+        devices.insert(0, {"id": "auto", "nome": "Automático", "disponivel": True, "info": "Detecta o melhor"})
+        return devices
+
+    def set_device(self, device: str) -> dict:
+        """Define device preferido (auto, cpu, cuda, cuda:0, mps)."""
+        self.device_atual = device
+        cfg = _carregar_config()
+        cfg["device"] = device
+        _salvar_config(cfg)
+        return {"ok": True, "device": device, "aviso": "Recarregue o modelo pra aplicar."}
 
     # --- Descoberta ---
 
@@ -433,24 +484,33 @@ class ModelManager:
             if not self.tokenizer.pad_token:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
 
-            # Detectar melhor device/dtype
-            # Tamanho do modelo em GB
+            # Device e dtype
             modelo_gb = sum(f.stat().st_size for f in pasta.glob("*.safetensors")) / (1024**3)
 
-            device = "cpu"
-            dtype = torch.float32
+            if self.device_atual == "auto":
+                # Auto-detectar
+                device = "cpu"
+                dtype = torch.float32
+                if torch.cuda.is_available():
+                    gpu_mem = torch.cuda.get_device_properties(0).total_mem / (1024**3)
+                    if modelo_gb * 1.2 < gpu_mem:
+                        device = "cuda"
+                        dtype = torch.float16
+                elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                    if modelo_gb < 4:
+                        device = "mps"
+                        dtype = torch.float16
+            elif self.device_atual.startswith("cuda"):
+                device = self.device_atual
+                dtype = torch.float16
+            elif self.device_atual == "mps":
+                device = "mps"
+                dtype = torch.float16
+            else:
+                device = "cpu"
+                dtype = torch.float32
 
-            if torch.cuda.is_available():
-                gpu_mem = torch.cuda.get_device_properties(0).total_mem / (1024**3)
-                if modelo_gb * 1.2 < gpu_mem:
-                    device = "cuda"
-                    dtype = torch.float16
-            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-                # MPS tem limite de buffer - só usar pra modelos pequenos (<4GB)
-                if modelo_gb < 4:
-                    device = "mps"
-                    dtype = torch.float16
-
+            self.device_nome = device
             logger.info(f"  Device: {device} | Dtype: {dtype} | Modelo: {modelo_gb:.1f}GB")
 
             # Carregar modelo
@@ -607,6 +667,8 @@ class ModelManager:
             "pronto": self.pronto(),
             "carregando": self.carregando,
             "warmup": self.warmup_done,
+            "device_config": self.device_atual,
+            "device": self.device_nome,
             "downloads": dict(self.progresso_download),
         }
 
@@ -1060,6 +1122,14 @@ async def api_descarregar():
 async def api_deletar_modelo(nome: str):
     return manager.deletar(nome)
 
+@app.get("/api/devices")
+async def api_devices():
+    return {"devices": manager.detectar_devices(), "atual": manager.device_atual}
+
+@app.post("/api/devices")
+async def api_set_device(device: str):
+    return manager.set_device(device)
+
 @app.get("/api/sessoes")
 async def api_sessoes(user: str = None):
     return {"sessoes": listar_sessoes(user)}
@@ -1466,6 +1536,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 <div class="card"><h2>Sistema</h2><div class="sg" id="sys"></div></div>
 
 <div class="card">
+<h2>Device (CPU/GPU)</h2>
+<p style="font-size:13px;color:var(--t2);margin-bottom:10px">Escolha onde rodar o modelo. GPU NVIDIA é ~10-50x mais rápido que CPU.</p>
+<div style="display:flex;gap:8px;flex-wrap:wrap" id="deviceList"></div>
+<p id="deviceAviso" style="font-size:12px;color:var(--or);margin-top:8px;display:none">Recarregue o modelo pra aplicar.</p>
+</div>
+
+<div class="card">
 <h2>Modelos Baixados</h2>
 <div class="ml" id="locais"></div>
 </div>
@@ -1509,6 +1586,7 @@ async function load(){
     document.getElementById('sts').innerHTML=`
         <div class="st"><div class="n" style="font-size:16px">${d.modelo_ativo||'nenhum'}</div><div class="l">Modelo Ativo</div></div>
         <div class="st"><div class="n" style="color:${d.pronto?'var(--gn)':'var(--rd)'}">${d.pronto?'Pronto':'Off'}</div><div class="l">Status</div></div>
+        <div class="st"><div class="n" style="font-size:16px">${d.device||'—'}</div><div class="l">Device</div></div>
         <div class="st"><div class="n" style="color:${d.warmup?'var(--gn)':'var(--t2)'}">${d.warmup?'Quente':'Frio'}</div><div class="l">Pre-load</div></div>
         <div class="st"><div class="n" style="color:${d.carregando?'var(--or)':'var(--t2)'}">${d.carregando?'Sim':'Não'}</div><div class="l">Carregando</div></div>
     `;
@@ -1564,6 +1642,26 @@ async function baixar(n){const r=await fetch('/api/modelos/baixar?nome='+n,{meth
 async function carregar(n){const r=await fetch('/api/modelos/carregar?nome='+n,{method:'POST'});const d=await r.json();toast(d.status||'Carregando...');load()}
 async function descarregar(){await fetch('/api/modelos/descarregar',{method:'POST'});toast('Descarregado');load()}
 async function deletar(n){if(!confirm('Deletar '+n+'?'))return;await fetch('/api/modelos/'+n,{method:'DELETE'});toast('Deletado');load()}
+
+// Devices
+async function loadDevices(){
+    try{
+        const r=await fetch('/api/devices');const d=await r.json();
+        const el=document.getElementById('deviceList');
+        el.innerHTML=d.devices.map(dv=>{
+            const sel=dv.id===d.atual;
+            return`<div class="mi ${sel?'act':''}" style="cursor:pointer;flex:1;min-width:200px" onclick="setDevice('${dv.id}')">
+                <div class="nm">${sel?'●':'○'} ${dv.nome}<br><span style="font-size:11px;color:var(--t2)">${dv.info}</span></div>
+                ${sel?'<span class="badge">ativo</span>':''}
+            </div>`}).join('');
+    }catch(e){}
+}
+async function setDevice(id){
+    await fetch('/api/devices?device='+id,{method:'POST'});
+    document.getElementById('deviceAviso').style.display='block';
+    toast('Device alterado para '+id);
+    loadDevices();load();
+}
 
 // API Key + Config
 async function loadApiKey(){
@@ -1640,7 +1738,7 @@ async function deletarUser(u){
     await fetch('/api/auth/users/'+u,{method:'DELETE'});toast('Deletado');loadUsers();
 }
 
-load();loadUsers();loadApiKey();
+load();loadUsers();loadApiKey();loadDevices();
 // Refresh mais rápido quando tem download ativo
 setInterval(()=>{
     const hasDownload=document.querySelector('.bar');
