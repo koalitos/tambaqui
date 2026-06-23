@@ -31,3 +31,4 @@ u = os.environ.get('TAMBAQUI_ADMIN_USER', 'admin'); \
 p = os.environ.get('TAMBAQUI_ADMIN_PASS', 'tambaqui'); \
 user_criar(u, p, True) if u not in users else None; \
 " && python3 app.py
+
