@@ -1,9 +1,7 @@
-<?xml version="1.0"?>
-<ProfileList>
+<CommunityApplications>
   <Profile>
-    <Name>koalitos</Name>
-    <Github>https://github.com/koalitos</Github>
-    <Discord></Discord>
-    <Support>https://github.com/koalitos/tambaqui/issues</Support>
+    Tambaqui is a Brazilian AI coding assistant with an OpenAI-compatible API. This repository contains the Tambaqui Docker template for Unraid. It lets you download and run HuggingFace code models locally (Qwen, DeepSeek, CodeLlama), chat with web search, manage models via admin panel, and connect any OpenAI client. For support, open an issue on GitHub.
   </Profile>
-</ProfileList>
+  <Icon>https://raw.githubusercontent.com/koalitos/tambaqui/main/docs/icon.png</Icon>
+  <WebPage>https://github.com/koalitos/tambaqui</WebPage>
+</CommunityApplications>
