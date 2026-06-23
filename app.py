@@ -948,85 +948,147 @@ async def api_regen_key(request: Request):
 
 class ChatMessage(BaseModel):
     role: str
-    content: str
+    content: str = ""
 
 class ChatRequest(BaseModel):
     model: str = ""
     messages: List[ChatMessage]
     temperature: float = 0.7
-    max_tokens: int = 2048
+    max_tokens: Optional[int] = 2048
     top_p: float = 0.9
     stream: bool = False
+    stop: Optional[List[str]] = None
+    n: int = 1
+    presence_penalty: float = 0
+    frequency_penalty: float = 0
+
+    class Config:
+        extra = "allow"  # aceitar campos extras sem erro
 
 class CompletionRequest(BaseModel):
     model: str = ""
-    prompt: str
+    prompt: str = ""
     max_tokens: int = 256
     temperature: float = 0.7
     stream: bool = False
+    stop: Optional[List[str]] = None
+
+    class Config:
+        extra = "allow"
+
+
+def _contar_tokens(text: str) -> int:
+    """Estimativa simples de tokens (~4 chars por token)."""
+    return len(text) // 4
 
 
 @app.get("/v1/models")
-async def list_models():
+@app.get("/v1/models/{model_id}")
+async def list_models(model_id: str = None):
     """Lista modelos no formato OpenAI."""
     modelos = manager.listar_locais()
-    return {
-        "object": "list",
-        "data": [{"id": m["nome"], "object": "model", "owned_by": "tambaqui"} for m in modelos],
-    }
+    data = []
+    for m in modelos:
+        obj = {
+            "id": m["nome"],
+            "object": "model",
+            "created": int(time.time()),
+            "owned_by": "tambaqui",
+            "permission": [],
+            "root": m["nome"],
+            "parent": None,
+        }
+        if model_id and m["nome"] == model_id:
+            return obj
+        data.append(obj)
+    if model_id:
+        return JSONResponse(status_code=404, content={"error": {"message": f"Model '{model_id}' not found", "type": "invalid_request_error"}})
+    return {"object": "list", "data": data}
 
 
 @app.post("/v1/chat/completions")
 async def chat_completions(req: ChatRequest, request: Request):
     """Endpoint principal - compatível com OpenAI API."""
     if _auth_ativo() and not _get_user_from_request(request):
-        return JSONResponse(status_code=401, content={"error": {"message": "API key inválida. Use Authorization: Bearer tb-...", "type": "auth_error"}})
+        return JSONResponse(status_code=401, content={"error": {"message": "Invalid API key. Use Authorization: Bearer tb-...", "type": "invalid_api_key", "code": "invalid_api_key"}})
     if not manager.pronto():
-        return JSONResponse(status_code=503, content={"error": {"message": "Modelo não carregado", "type": "server_error"}})
+        return JSONResponse(status_code=503, content={"error": {"message": "No model loaded. Open /admin to download and load a model.", "type": "server_error"}})
 
-    messages = [m.dict() for m in req.messages]
+    messages = [{"role": m.role, "content": m.content} for m in req.messages]
+    max_tokens = req.max_tokens or 2048
 
     if req.stream:
-        return StreamingResponse(_stream_response(messages, req), media_type="text/event-stream")
+        return StreamingResponse(_stream_response(messages, req), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     # Resposta completa
-    resposta = manager.gerar(messages, req.max_tokens, req.temperature, req.top_p, stream=False)
+    prompt_text = " ".join(m["content"] for m in messages)
+    resposta = manager.gerar(messages, max_tokens, req.temperature, req.top_p, stream=False)
     if not resposta:
-        resposta = "Erro ao gerar resposta."
+        resposta = ""
+
+    prompt_tokens = _contar_tokens(prompt_text)
+    completion_tokens = _contar_tokens(resposta)
 
     return {
         "id": f"chatcmpl-{uuid.uuid4().hex[:8]}",
         "object": "chat.completion",
         "created": int(time.time()),
-        "model": manager.modelo_ativo or "",
+        "model": manager.modelo_ativo or req.model or "",
         "choices": [{
             "index": 0,
             "message": {"role": "assistant", "content": resposta},
             "finish_reason": "stop",
         }],
-        "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        "usage": {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+        },
+    }
+
+
+@app.post("/v1/completions")
+async def completions(req: CompletionRequest, request: Request):
+    """Legacy completions endpoint."""
+    if _auth_ativo() and not _get_user_from_request(request):
+        return JSONResponse(status_code=401, content={"error": {"message": "Invalid API key", "type": "invalid_api_key"}})
+    if not manager.pronto():
+        return JSONResponse(status_code=503, content={"error": {"message": "No model loaded", "type": "server_error"}})
+
+    messages = [{"role": "user", "content": req.prompt}]
+    resposta = manager.gerar(messages, req.max_tokens, req.temperature, stream=False) or ""
+
+    return {
+        "id": f"cmpl-{uuid.uuid4().hex[:8]}",
+        "object": "text_completion",
+        "created": int(time.time()),
+        "model": manager.modelo_ativo or "",
+        "choices": [{"text": resposta, "index": 0, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": _contar_tokens(req.prompt), "completion_tokens": _contar_tokens(resposta), "total_tokens": _contar_tokens(req.prompt) + _contar_tokens(resposta)},
     }
 
 
 def _stream_response(messages: list, req: ChatRequest):
-    """Gera SSE no formato OpenAI streaming."""
+    """Gera SSE no formato OpenAI streaming - compatível com todos os CLIs."""
     chat_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
+    model = manager.modelo_ativo or req.model or ""
+    created = int(time.time())
+    max_tokens = req.max_tokens or 2048
 
-    for chunk in manager.gerar(messages, req.max_tokens, req.temperature, req.top_p, stream=True):
+    # Primeiro chunk: role
+    yield f"data: {json.dumps({'id': chat_id, 'object': 'chat.completion.chunk', 'created': created, 'model': model, 'choices': [{'index': 0, 'delta': {'role': 'assistant'}, 'finish_reason': None}]})}\n\n"
+
+    for chunk in manager.gerar(messages, max_tokens, req.temperature, req.top_p, stream=True):
         data = {
             "id": chat_id, "object": "chat.completion.chunk",
-            "created": int(time.time()), "model": manager.modelo_ativo or "",
+            "created": created, "model": model,
             "choices": [{"index": 0, "delta": {"content": chunk}, "finish_reason": None}],
         }
         yield f"data: {json.dumps(data)}\n\n"
 
     # Final
-    data = {
-        "id": chat_id, "object": "chat.completion.chunk",
-        "created": int(time.time()), "model": manager.modelo_ativo or "",
-        "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
-    }
-    yield f"data: {json.dumps(data)}\n\n"
+    yield f"data: {json.dumps({'id': chat_id, 'object': 'chat.completion.chunk', 'created': created, 'model': model, 'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}]})}\n\n"
     yield "data: [DONE]\n\n"
 
 
