@@ -135,17 +135,23 @@ def _hash_senha(senha: str) -> str:
     return hashlib.sha256(senha.encode()).hexdigest()
 
 
+def _gerar_api_key() -> str:
+    return "tb-" + secrets.token_hex(24)
+
+
 def user_criar(username: str, senha: str, admin: bool = False) -> dict:
     users = _carregar_users()
     if username in users:
         return {"erro": f"User '{username}' já existe"}
+    api_key = _gerar_api_key()
     users[username] = {
         "senha_hash": _hash_senha(senha),
         "admin": admin,
+        "api_key": api_key,
         "criado_em": datetime.now().isoformat(),
     }
     _salvar_users(users)
-    return {"ok": True, "username": username, "admin": admin}
+    return {"ok": True, "username": username, "admin": admin, "api_key": api_key}
 
 
 def user_login(username: str, senha: str) -> Optional[str]:
@@ -159,14 +165,22 @@ def user_login(username: str, senha: str) -> Optional[str]:
 
 
 def user_validar(token: str) -> Optional[dict]:
+    # Sessão de login
     username = TOKENS.get(token)
-    if not username:
-        return None
-    users = _carregar_users()
-    user = users.get(username)
-    if not user:
-        return None
-    return {"username": username, "admin": user.get("admin", False)}
+    if username:
+        users = _carregar_users()
+        user = users.get(username)
+        if user:
+            return {"username": username, "admin": user.get("admin", False)}
+
+    # API key (tb-...)
+    if token.startswith("tb-"):
+        users = _carregar_users()
+        for uname, data in users.items():
+            if data.get("api_key") == token:
+                return {"username": uname, "admin": data.get("admin", False)}
+
+    return None
 
 
 def user_trocar_senha(username: str, nova_senha: str) -> dict:
@@ -180,8 +194,31 @@ def user_trocar_senha(username: str, nova_senha: str) -> dict:
 
 def user_listar() -> list:
     users = _carregar_users()
-    return [{"username": u, "admin": d.get("admin", False), "criado_em": d.get("criado_em", "")}
+    return [{"username": u, "admin": d.get("admin", False),
+             "api_key": d.get("api_key", ""), "criado_em": d.get("criado_em", "")}
             for u, d in users.items()]
+
+
+def user_regenerar_key(username: str) -> dict:
+    users = _carregar_users()
+    if username not in users:
+        return {"erro": "User não encontrado"}
+    new_key = _gerar_api_key()
+    users[username]["api_key"] = new_key
+    _salvar_users(users)
+    return {"ok": True, "api_key": new_key}
+
+
+def user_get_api_key(username: str) -> Optional[str]:
+    users = _carregar_users()
+    user = users.get(username)
+    if not user:
+        return None
+    # Gerar se não tem
+    if not user.get("api_key"):
+        user["api_key"] = _gerar_api_key()
+        _salvar_users(users)
+    return user["api_key"]
 
 
 def user_deletar(username: str) -> dict:
@@ -775,6 +812,35 @@ async def api_deletar_user(username: str, request: Request):
     return user_deletar(username)
 
 
+@app.get("/api/auth/api-key")
+async def api_get_key(request: Request):
+    """Retorna a API key do user logado."""
+    user = _get_user_from_request(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"erro": "Não autenticado"})
+    key = user_get_api_key(user["username"])
+    modelo = manager.modelo_ativo or "nenhum"
+    return {
+        "api_key": key,
+        "username": user["username"],
+        "config": {
+            "base_url": f"http://localhost:{PORT}/v1",
+            "api_key": key,
+            "model": modelo,
+        },
+        "env": f"OPENAI_API_BASE=http://localhost:{PORT}/v1\nOPENAI_API_KEY={key}",
+        "curl": f'curl http://localhost:{PORT}/v1/chat/completions \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer {key}" \\\n  -d \'{{"model":"{modelo}","messages":[{{"role":"user","content":"oi"}}]}}\'',
+    }
+
+
+@app.post("/api/auth/api-key/regenerar")
+async def api_regen_key(request: Request):
+    user = _get_user_from_request(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"erro": "Não autenticado"})
+    return user_regenerar_key(user["username"])
+
+
 # --- OpenAI-Compatible API ---
 
 class ChatMessage(BaseModel):
@@ -808,8 +874,10 @@ async def list_models():
 
 
 @app.post("/v1/chat/completions")
-async def chat_completions(req: ChatRequest):
+async def chat_completions(req: ChatRequest, request: Request):
     """Endpoint principal - compatível com OpenAI API."""
+    if _auth_ativo() and not _get_user_from_request(request):
+        return JSONResponse(status_code=401, content={"error": {"message": "API key inválida. Use Authorization: Bearer tb-...", "type": "auth_error"}})
     if not manager.pronto():
         return JSONResponse(status_code=503, content={"error": {"message": "Modelo não carregado", "type": "server_error"}})
 
@@ -954,6 +1022,14 @@ async def api_deletar_modelo(nome: str):
 async def api_sessoes(user: str = None):
     return {"sessoes": listar_sessoes(user)}
 
+@app.get("/api/sessoes/{sid}")
+async def api_sessao_detalhe(sid: str):
+    sessao = Sessao(sid)
+    return {
+        "session_id": sessao.session_id, "titulo": sessao.titulo,
+        "historico": [{"role": h["role"], "content": h["content"]} for h in sessao.historico],
+    }
+
 @app.delete("/api/sessoes/{sid}")
 async def api_deletar_sessao(sid: str):
     f = SESSOES_DIR / f"{sid}.json"
@@ -1049,11 +1125,23 @@ HTML_CHAT = """<!DOCTYPE html>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#0d1117;--sf:#161b22;--bd:#30363d;--tx:#e6edf3;--t2:#8b949e;--ac:#58a6ff;--gn:#3fb950;--or:#d29922;--rd:#f85149}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh;display:flex;flex-direction:column}
-.hdr{background:var(--sf);border-bottom:1px solid var(--bd);padding:12px 20px;display:flex;align-items:center;gap:12px}
-.hdr h1{font-size:18px} .hdr h1 span{color:var(--ac)}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh;display:flex}
+.side{width:260px;background:var(--sf);border-right:1px solid var(--bd);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
+.side-hdr{padding:14px 16px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:8px}
+.side-hdr h2{font-size:14px;flex:1}.side-hdr h2 span{color:var(--ac)}
+.side-btn{background:var(--ac);color:#000;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer}
+.side-list{flex:1;overflow-y:auto;padding:8px}
+.si{padding:8px 10px;border-radius:6px;cursor:pointer;margin-bottom:2px;font-size:13px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.si:hover{background:var(--bg)}.si.act{background:var(--bg);color:var(--tx);border:1px solid var(--bd)}
+.si .st-date{font-size:10px;color:var(--t2)}
+.side-foot{padding:10px 16px;border-top:1px solid var(--bd);font-size:11px;color:var(--t2)}
+.side-foot a{color:var(--ac);text-decoration:none}
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.hdr{background:var(--sf);border-bottom:1px solid var(--bd);padding:10px 20px;display:flex;align-items:center;gap:12px}
+.hdr h1{font-size:16px} .hdr h1 span{color:var(--ac)}
 .hdr .tag{background:var(--ac);color:#000;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600}
-.hdr a{margin-left:auto;color:var(--t2);text-decoration:none;font-size:13px;padding:4px 10px;border:1px solid var(--bd);border-radius:6px}
+.hdr a{margin-left:auto;color:var(--t2);text-decoration:none;font-size:12px;padding:4px 10px;border:1px solid var(--bd);border-radius:6px}
+.hdr a:hover{color:var(--tx)}
 .chat{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px;max-width:960px;width:100%;margin:0 auto}
 .msg{display:flex;gap:10px;animation:fi .3s ease}.msg.u{flex-direction:row-reverse}
 .av{width:32px;height:32px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px}
@@ -1070,7 +1158,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .ft{font-size:11px;color:var(--t2);margin-top:6px;padding-top:6px;border-top:1px solid var(--bd);display:flex;gap:4px;flex-wrap:wrap}
 .ft span{background:var(--bg);padding:1px 6px;border-radius:3px;border:1px solid var(--bd)}
 @keyframes fi{from{opacity:0;transform:translateY(8px)}to{opacity:1}}
-.inp{background:var(--sf);border-top:1px solid var(--bd);padding:16px 20px}
+.inp{background:var(--sf);border-top:1px solid var(--bd);padding:12px 20px}
 .ibox{max-width:960px;margin:0 auto;display:flex;gap:10px}
 .ibox textarea{flex:1;background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:12px;color:var(--tx);font-size:14px;outline:none;resize:none;min-height:44px;max-height:200px;font-family:inherit}
 .ibox textarea:focus{border-color:var(--ac)}
@@ -1082,11 +1170,21 @@ pre:hover .cp{opacity:1}.cp:hover{background:var(--ac);color:#000}
 .typing span{width:6px;height:6px;background:var(--t2);border-radius:50%;display:inline-block;animation:bn .6s infinite alternate;margin:0 2px}
 .typing span:nth-child(2){animation-delay:.2s}.typing span:nth-child(3){animation-delay:.4s}
 @keyframes bn{to{transform:translateY(-6px);opacity:.5}}
-.warn{background:#1a1500;border:1px solid var(--or);border-radius:8px;padding:12px 16px;margin:8px auto;max-width:960px;font-size:13px;color:var(--or);text-align:center}
+.warn{background:#1a1500;border:1px solid var(--or);border-radius:8px;padding:10px 16px;margin:8px auto;max-width:960px;font-size:13px;color:var(--or);text-align:center}
 .warn a{color:var(--ac)}
+@media(max-width:700px){.side{display:none}.main{width:100%}}
 </style>
 </head>
 <body>
+<div class="side">
+    <div class="side-hdr">
+        <h2>🐟 <span>Sessões</span></h2>
+        <button class="side-btn" onclick="novaSessao()">+ Nova</button>
+    </div>
+    <div class="side-list" id="sessList"></div>
+    <div class="side-foot"><a href="/admin">Admin</a> | <a href="#" onclick="logout()">Sair</a></div>
+</div>
+<div class="main">
 <div class="hdr">
     <h1>🐟 <span>Tambaqui</span></h1>
     <div class="tag">IA de Código</div>
@@ -1096,7 +1194,7 @@ pre:hover .cp{opacity:1}.cp:hover{background:var(--ac);color:#000}
 <div class="chat" id="chat">
     <div class="msg a"><div class="av">🐟</div><div class="bb">
         <p><strong>Tambaqui 🐟</strong> - IA brasileira de código</p>
-        <p>API compatível com OpenAI em <code>http://localhost:8000/v1</code></p>
+        <p>Comece a conversar ou selecione uma sessão anterior.</p>
     </div></div>
 </div>
 <div class="inp">
@@ -1108,6 +1206,7 @@ pre:hover .cp{opacity:1}.cp:hover{background:var(--ac);color:#000}
         <button id="btn" onclick="go()">Enviar</button>
     </div>
 </div>
+</div>
 <script>
 const R=new marked.Renderer();
 R.code=function(c,l){let t=typeof c==='object'?c.text:c,g=typeof c==='object'?c.lang:l;g=g||'';
@@ -1117,10 +1216,58 @@ marked.setOptions({renderer:R,breaks:true,gfm:true});
 let sid=localStorage.getItem('t_sid')||null;
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}
 
+// Sessões sidebar
+async function loadSess(){
+    try{
+        const r=await fetch('/api/sessoes');const d=await r.json();
+        const el=document.getElementById('sessList');
+        if(!d.sessoes||!d.sessoes.length){el.innerHTML='<p style="padding:10px;color:var(--t2);font-size:12px">Nenhuma sessão</p>';return}
+        el.innerHTML=d.sessoes.map(s=>{
+            const act=s.session_id===sid?'act':'';
+            const dt=s.atualizada_em?new Date(s.atualizada_em).toLocaleDateString('pt-BR',''):'';
+            return`<div class="si ${act}" onclick="carregarSessao('${s.session_id}')" title="${esc(s.titulo)}">
+                ${esc(s.titulo||'Sem título')}<br><span class="st-date">${s.mensagens} msgs - ${dt}</span>
+            </div>`}).join('');
+    }catch(e){}
+}
+
+async function carregarSessao(id){
+    sid=id;localStorage.setItem('t_sid',sid);
+    // Carregar histórico da sessão
+    try{
+        const r=await fetch('/api/sessoes/'+id);const d=await r.json();
+        const ch=document.getElementById('chat');
+        ch.innerHTML='';
+        if(d.historico){
+            for(const m of d.historico){
+                if(m.role==='user'){
+                    ch.innerHTML+=`<div class="msg u"><div class="av">EU</div><div class="bb"><p>${esc(m.content)}</p></div></div>`;
+                }else{
+                    ch.innerHTML+=`<div class="msg a"><div class="av">🐟</div><div class="bb">${marked.parse(m.content)}</div></div>`;
+                }
+            }
+            ch.querySelectorAll('pre code').forEach(b=>hljs.highlightElement(b));
+            ch.scrollTop=ch.scrollHeight;
+        }
+    }catch(e){}
+    loadSess();
+}
+
+function novaSessao(){
+    sid=null;localStorage.removeItem('t_sid');
+    document.getElementById('chat').innerHTML=`<div class="msg a"><div class="av">🐟</div><div class="bb">
+        <p><strong>Nova conversa</strong></p></div></div>`;
+    loadSess();
+}
+
+async function logout(){
+    await fetch('/api/auth/logout',{method:'POST'});
+    window.location.href='/login';
+}
+
 async function go(){
     const ta=document.getElementById('in'),m=ta.value.trim();if(!m)return;
     const ch=document.getElementById('chat'),bt=document.getElementById('btn');
-    if(m==='/nova'){sid=null;localStorage.removeItem('t_sid');ch.innerHTML='';ta.value='';return}
     ch.innerHTML+=`<div class="msg u"><div class="av">EU</div><div class="bb"><p>${esc(m)}</p></div></div>`;
     ta.value='';ta.style.height='auto';bt.disabled=true;bt.textContent='...';
     const el=document.createElement('div');el.className='msg a';
@@ -1156,6 +1303,7 @@ async function go(){
                         let ft='';if(fontes.length)ft=`<div class="ft">${fontes.map(f=>`<span>${f}</span>`).join('')}</div>`;
                         bb.innerHTML=marked.parse(full)+ft;
                         bb.querySelectorAll('pre code').forEach(b=>hljs.highlightElement(b));
+                        loadSess();
                     }
                 }catch(pe){}
             }
@@ -1163,6 +1311,7 @@ async function go(){
     }catch(e){el.querySelector('.bb').innerHTML=`<p style="color:var(--rd)">Erro: ${e}</p>`}
     bt.disabled=false;bt.textContent='Enviar';ch.scrollTop=ch.scrollHeight;
 }
+
 async function sts(){
     try{const r=await fetch('/api/status'),d=await r.json(),e=document.getElementById('st'),w=document.getElementById('warn');
     if(!d.pronto&&!d.carregando){w.innerHTML='<div class="warn">Nenhum modelo carregado. <a href="/admin">Abra o Admin</a> para baixar e ativar.</div>'}
@@ -1170,9 +1319,9 @@ async function sts(){
     const m=d.pronto?`🐟 ${d.modelo_ativo}`:(d.carregando?'Carregando...':'Sem modelo');
     const cpu=d.cpu_percent!==undefined?` | CPU ${d.cpu_percent}%`:'';
     const ram=d.ram_percent!==undefined?` | RAM ${d.ram_percent}%`:'';
-    e.textContent=`${m}${cpu}${ram}${sid?' | Sessão: '+sid.substring(0,8):''}`}catch(e){}
+    e.textContent=`${m}${cpu}${ram}`}catch(e){}
 }
-sts();setInterval(sts,3000);
+loadSess();sts();setInterval(sts,5000);
 </script>
 </body></html>"""
 
@@ -1244,15 +1393,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 
 <div class="card">
-<h2>API OpenAI-Compatível</h2>
-<div class="api-info">
-<p>Base URL: <code>http://localhost:8000/v1</code></p>
-<p>Modelos: <code>GET /v1/models</code></p>
-<p>Chat: <code>POST /v1/chat/completions</code></p>
-<p style="margin-top:8px">Use em qualquer client OpenAI:</p>
-<p><code>OPENAI_API_BASE=http://localhost:8000/v1</code></p>
-<p><code>OPENAI_API_KEY=qualquer-coisa</code></p>
+<h2>Sua API Key</h2>
+<div class="api-info" id="apiKeyInfo">Carregando...</div>
+<button class="btn btn-a" onclick="regenKey()" style="margin-top:10px">Regenerar API Key</button>
 </div>
+
+<div class="card">
+<h2>Como Conectar</h2>
+<div class="api-info" id="connectInfo">Carregando...</div>
 </div>
 
 </div>
@@ -1308,6 +1456,42 @@ async function carregar(n){const r=await fetch('/api/modelos/carregar?nome='+n,{
 async function descarregar(){await fetch('/api/modelos/descarregar',{method:'POST'});toast('Descarregado');load()}
 async function deletar(n){if(!confirm('Deletar '+n+'?'))return;await fetch('/api/modelos/'+n,{method:'DELETE'});toast('Deletado');load()}
 
+// API Key + Config
+async function loadApiKey(){
+    try{
+        const r=await fetch('/api/auth/api-key');
+        if(r.status!==200)return;
+        const d=await r.json();
+        document.getElementById('apiKeyInfo').innerHTML=`
+            <p>API Key: <code style="user-select:all">${d.api_key}</code>
+            <button class="cp" style="position:static;opacity:1;margin-left:4px" onclick="navigator.clipboard.writeText('${d.api_key}');this.textContent='✓'">Copiar</button></p>
+            <p style="margin-top:4px;font-size:12px;color:var(--t2)">User: ${d.username}</p>
+        `;
+        const c=d.config;
+        document.getElementById('connectInfo').innerHTML=`
+            <p><strong>Variáveis de ambiente:</strong></p>
+            <pre style="background:var(--bg);padding:10px;margin:8px 0;border-radius:4px"><code>OPENAI_API_BASE=${c.base_url}
+OPENAI_API_KEY=${c.api_key}</code></pre>
+            <p><strong>Modelo ativo:</strong> <code>${c.model||'nenhum'}</code></p>
+            <p style="margin-top:10px"><strong>Teste com curl:</strong></p>
+            <pre style="background:var(--bg);padding:10px;margin:8px 0;border-radius:4px;white-space:pre-wrap;font-size:12px"><code>${d.curl}</code></pre>
+            <p style="margin-top:10px"><strong>Clients compatíveis:</strong></p>
+            <ul style="margin:4px 0 0 16px;font-size:13px;color:var(--t2)">
+                <li>Open WebUI - coloque a Base URL e API Key</li>
+                <li>Continue.dev (VS Code) - configure provider custom</li>
+                <li>LibreChat - adicione endpoint OpenAI custom</li>
+                <li>Qualquer client com suporte a API OpenAI</li>
+            </ul>
+        `;
+    }catch(e){}
+}
+async function regenKey(){
+    if(!confirm('Regenerar API key? A key anterior vai parar de funcionar.'))return;
+    await fetch('/api/auth/api-key/regenerar',{method:'POST'});
+    toast('API key regenerada');
+    loadApiKey();
+}
+
 // Users
 async function loadUsers(){
     try{
@@ -1318,11 +1502,12 @@ async function loadUsers(){
         const el=document.getElementById('userList');
         if(!d.users||!d.users.length){el.innerHTML='<p style="color:var(--t2)">Nenhum usuário</p>';return}
         el.innerHTML=d.users.map(u=>`
-            <div class="mi">
+            <div class="mi" style="flex-wrap:wrap">
                 <div class="nm">${u.username} ${u.admin?'<span class="badge">admin</span>':''}</div>
                 <div class="mt">${u.criado_em?new Date(u.criado_em).toLocaleDateString('pt-BR'):''}</div>
                 <button class="btn btn-a btn-s" onclick="trocarSenha('${u.username}')">Senha</button>
                 <button class="btn btn-r btn-s" onclick="deletarUser('${u.username}')">X</button>
+                <div style="width:100%;margin-top:4px;font-size:11px;color:var(--t2)">Key: <code style="user-select:all">${u.api_key||'sem key'}</code></div>
             </div>`).join('');
     }catch(e){}
 }
@@ -1346,7 +1531,7 @@ async function deletarUser(u){
     await fetch('/api/auth/users/'+u,{method:'DELETE'});toast('Deletado');loadUsers();
 }
 
-load();loadUsers();setInterval(load,5000);
+load();loadUsers();loadApiKey();setInterval(load,5000);
 </script>
 </body></html>"""
 
