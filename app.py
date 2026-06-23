@@ -641,6 +641,10 @@ class ModelManager:
             self.tokenizer.padding_side = "left"
 
             self.modelo_ativo = nome
+            # Salvar pra lembrar no modo sob demanda
+            cfg = _carregar_config()
+            cfg["ultimo_modelo"] = nome
+            _salvar_config(cfg)
             n_params = sum(p.numel() for p in self.model.parameters())
             logger.info(f"✅ Modelo pronto: {nome} ({n_params/1e9:.1f}B params, {device})")
 
@@ -730,14 +734,15 @@ class ModelManager:
         self._idle_timer.start()
 
     def _auto_carregar(self):
-        """Carrega modelo automaticamente se modo ondemand."""
+        """Carrega modelo automaticamente (modo ondemand)."""
         if self.model:
             return True
         locais = self.listar_locais()
         if not locais:
             return False
-        # Usar o último modelo ativo ou o primeiro disponível
-        nome = self.modelo_ativo or locais[0]["nome"]
+        # Usar último modelo ou config salva ou primeiro disponível
+        cfg = _carregar_config()
+        nome = self.modelo_ativo or cfg.get("ultimo_modelo") or locais[0]["nome"]
         logger.info(f"🔄 Sob demanda - carregando {nome}...")
         self.carregar(nome)
         return self.model is not None
@@ -1233,7 +1238,12 @@ async def chat_completions(req: ChatRequest, request: Request):
     if _auth_ativo() and not _get_user_from_request(request):
         return JSONResponse(status_code=401, content={"error": {"message": "Invalid API key. Use Authorization: Bearer tb-...", "type": "invalid_api_key", "code": "invalid_api_key"}})
     if not manager.pronto():
-        return JSONResponse(status_code=503, content={"error": {"message": "No model loaded. Open /admin to download and load a model.", "type": "server_error"}})
+        # Sob demanda: tentar carregar automaticamente
+        if manager.get_load_mode() == "ondemand":
+            if not manager._auto_carregar():
+                return JSONResponse(status_code=503, content={"error": {"message": "No models available to load", "type": "server_error"}})
+        else:
+            return JSONResponse(status_code=503, content={"error": {"message": "No model loaded. Open /admin to download and load a model.", "type": "server_error"}})
 
     messages = [{"role": m.role, "content": m.content} for m in req.messages]
     max_tokens = req.max_tokens or 2048
@@ -1287,7 +1297,11 @@ async def completions(req: CompletionRequest, request: Request):
     if _auth_ativo() and not _get_user_from_request(request):
         return JSONResponse(status_code=401, content={"error": {"message": "Invalid API key", "type": "invalid_api_key"}})
     if not manager.pronto():
-        return JSONResponse(status_code=503, content={"error": {"message": "No model loaded", "type": "server_error"}})
+        if manager.get_load_mode() == "ondemand":
+            if not manager._auto_carregar():
+                return JSONResponse(status_code=503, content={"error": {"message": "No models available", "type": "server_error"}})
+        else:
+            return JSONResponse(status_code=503, content={"error": {"message": "No model loaded", "type": "server_error"}})
 
     messages = [{"role": "user", "content": req.prompt}]
     resposta = manager.gerar(messages, req.max_tokens, req.temperature, stream=False) or ""
