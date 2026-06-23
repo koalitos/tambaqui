@@ -603,11 +603,31 @@ class ModelManager:
                 self.model = self.model.to(device)
             self.model.eval()
 
+            # --- Otimizações de performance ---
+
+            # 1. BetterTransformer / SDPA (Flash Attention se disponível)
+            try:
+                self.model = self.model.to_bettertransformer()
+                logger.info("  ⚡ BetterTransformer ativado")
+            except Exception:
+                pass
+
+            # 2. torch.compile (PyTorch 2.0+ - JIT compile, ~2x mais rápido)
+            try:
+                if hasattr(torch, "compile") and device != "mps":
+                    self.model = torch.compile(self.model, mode="reduce-overhead")
+                    logger.info("  ⚡ torch.compile ativado")
+            except Exception:
+                pass
+
+            # 3. KV cache e padding side
+            self.tokenizer.padding_side = "left"
+
             self.modelo_ativo = nome
             n_params = sum(p.numel() for p in self.model.parameters())
             logger.info(f"✅ Modelo pronto: {nome} ({n_params/1e9:.1f}B params, {device})")
 
-            # Warmup - gerar tokens dummy pra aquecer caches
+            # Warmup - gerar tokens dummy pra aquecer caches + compilar
             self._warmup()
 
             return {"ok": True, "nome": nome, "params": f"{n_params/1e9:.1f}B", "device": device}
@@ -621,19 +641,21 @@ class ModelManager:
             self.carregando = False
 
     def _warmup(self):
-        """Aquece o modelo com uma inferência dummy (como shaders de jogo)."""
+        """Aquece o modelo - compila caches, CUDA graphs, etc."""
         if not self.model or not self.tokenizer:
             return
-        logger.info("🔥 Warmup...")
+        logger.info("🔥 Warmup (compilando caches)...")
         try:
             import torch
-            inputs = self.tokenizer("def hello():", return_tensors="pt")
-            if hasattr(self.model, "device"):
-                inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
-            with torch.no_grad():
-                self.model.generate(**inputs, max_new_tokens=10, do_sample=False)
+            # Warmup com tamanhos diferentes pra compilar múltiplos paths
+            for prompt in ["def hello():", "# Python function that sorts a list\ndef sort_list(items):"]:
+                inputs = self.tokenizer(prompt, return_tensors="pt")
+                dev = next(self.model.parameters()).device
+                inputs = {k: v.to(dev) for k, v in inputs.items()}
+                with torch.inference_mode():
+                    self.model.generate(**inputs, max_new_tokens=5, do_sample=False, use_cache=True)
             self.warmup_done = True
-            logger.info("🔥 Warmup concluído - modelo quente!")
+            logger.info("🔥 Warmup concluído!")
         except Exception as e:
             logger.warning(f"Warmup falhou (não crítico): {e}")
 
@@ -716,27 +738,38 @@ class ModelManager:
             yield chunk
         self._limpar_cache()
 
+    def _get_gen_kwargs(self, max_tokens: int, temperature: float, top_p: float) -> dict:
+        """Kwargs comuns de geração otimizados."""
+        kwargs = {
+            "max_new_tokens": max_tokens,
+            "pad_token_id": self.tokenizer.eos_token_id,
+            "use_cache": True,  # KV cache - acelera geração
+            "repetition_penalty": 1.1,
+        }
+        if temperature > 0:
+            kwargs.update({"do_sample": True, "temperature": temperature, "top_p": top_p})
+        else:
+            kwargs["do_sample"] = False
+        return kwargs
+
+    def _prepare_inputs(self, messages: list):
+        """Prepara inputs com device correto."""
+        import torch
+        text = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        inputs = self.tokenizer(text, return_tensors="pt", truncation=True, max_length=4096)
+        # Mover pro device do modelo
+        dev = next(self.model.parameters()).device if hasattr(self.model, "parameters") else "cpu"
+        inputs = {k: v.to(dev) for k, v in inputs.items()}
+        return inputs, inputs["input_ids"].shape[1]
+
     def _gerar_completo(self, messages: list, max_tokens: int, temperature: float, top_p: float) -> Optional[str]:
         import torch
 
         try:
-            text = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-            inputs = self.tokenizer(text, return_tensors="pt", truncation=True, max_length=4096)
-            if hasattr(self.model, "device"):
-                inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
-            input_len = inputs["input_ids"].shape[1]
+            inputs, input_len = self._prepare_inputs(messages)
+            gen_kwargs = self._get_gen_kwargs(max_tokens, temperature, top_p)
 
-            gen_kwargs = {
-                "max_new_tokens": max_tokens,
-                "pad_token_id": self.tokenizer.eos_token_id,
-                "repetition_penalty": 1.1,
-            }
-            if temperature > 0:
-                gen_kwargs.update({"do_sample": True, "temperature": temperature, "top_p": top_p})
-            else:
-                gen_kwargs["do_sample"] = False
-
-            with torch.no_grad():
+            with torch.inference_mode():  # mais rápido que no_grad
                 outputs = self.model.generate(**inputs, **gen_kwargs)
 
             resposta = self.tokenizer.decode(outputs[0][input_len:], skip_special_tokens=True)
@@ -752,26 +785,15 @@ class ModelManager:
         from transformers import TextIteratorStreamer
 
         try:
-            text = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-            inputs = self.tokenizer(text, return_tensors="pt", truncation=True, max_length=4096)
-            if hasattr(self.model, "device"):
-                inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
-
+            inputs, _ = self._prepare_inputs(messages)
             streamer = TextIteratorStreamer(self.tokenizer, skip_prompt=True, skip_special_tokens=True)
+            gen_kwargs = {**inputs, **self._get_gen_kwargs(max_tokens, temperature, top_p), "streamer": streamer}
 
-            gen_kwargs = {
-                **inputs,
-                "max_new_tokens": max_tokens,
-                "pad_token_id": self.tokenizer.eos_token_id,
-                "streamer": streamer,
-                "repetition_penalty": 1.1,
-            }
-            if temperature > 0:
-                gen_kwargs.update({"do_sample": True, "temperature": temperature, "top_p": top_p})
-            else:
-                gen_kwargs["do_sample"] = False
+            def _gen():
+                with torch.inference_mode():
+                    self.model.generate(**gen_kwargs)
 
-            thread = threading.Thread(target=lambda: self.model.generate(**gen_kwargs))
+            thread = threading.Thread(target=_gen)
             thread.start()
 
             for chunk in streamer:
@@ -885,62 +907,90 @@ def _detectar_lang(msg: str) -> str:
     return ""
 
 
+_search_session = requests.Session()
+_search_session.headers.update(HTTP_HEADERS)
+
+
+def _buscar_wikipedia(topico, lang):
+    try:
+        busca = f"{topico} {'programação' if not lang else lang + ' software'}"
+        resp = _search_session.get("https://pt.wikipedia.org/w/api.php", params={
+            "action": "query", "list": "search", "srsearch": busca,
+            "srlimit": 2, "format": "json", "utf8": 1,
+        }, timeout=3)
+        resultados = resp.json().get("query", {}).get("search", [])
+        if resultados:
+            titulo = resultados[0]["title"]
+            resp2 = _search_session.get("https://pt.wikipedia.org/w/api.php", params={
+                "action": "query", "titles": titulo, "prop": "extracts",
+                "explaintext": True, "exintro": True, "format": "json", "utf8": 1,
+            }, timeout=3)
+            for page in resp2.json().get("query", {}).get("pages", {}).values():
+                if page.get("extract"):
+                    return f"Wikipedia ({titulo}):\n{page['extract'][:2000]}\n\n", "Wikipedia"
+    except Exception:
+        pass
+    return "", ""
+
+
+def _buscar_stackoverflow(topico, lang):
+    try:
+        tag = f"[{lang}]" if lang else ""
+        resp = _search_session.get("https://api.stackexchange.com/2.3/search/excerpts", params={
+            "order": "desc", "sort": "relevance", "q": f"{topico} {tag}",
+            "site": "stackoverflow", "pagesize": 3,
+        }, timeout=3)
+        ctx = ""
+        for item in resp.json().get("items", [])[:3]:
+            titulo = BeautifulSoup(item.get("title", ""), "html.parser").get_text()
+            corpo = BeautifulSoup(item.get("excerpt", ""), "html.parser").get_text()
+            ctx += f"StackOverflow: {titulo}\n{corpo[:300]}\n\n"
+        if ctx:
+            return ctx, "StackOverflow"
+    except Exception:
+        pass
+    return "", ""
+
+
+def _buscar_ddg(topico, lang):
+    try:
+        q = f"{topico} {lang} code" if lang else f"{topico} programming"
+        resp = _search_session.get("https://lite.duckduckgo.com/lite/", params={"q": q}, timeout=4)
+        soup = BeautifulSoup(resp.text, "html.parser")
+        ctx = ""
+        for link in soup.select("a.result-link")[:5]:
+            ctx += f"Web: {link.get_text(strip=True)}\n"
+        if ctx:
+            return ctx, "DuckDuckGo"
+    except Exception:
+        pass
+    return "", ""
+
+
 def buscar_web(query: str) -> dict:
-    """Busca em Wikipedia + StackOverflow + DuckDuckGo."""
+    """Busca em paralelo: Wikipedia + StackOverflow + DuckDuckGo."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     topico = _extrair_topico(query)
     lang = _detectar_lang(query)
     contexto = ""
     fontes = []
 
-    # Wikipedia
-    try:
-        busca = f"{topico} {'programação' if not lang else lang + ' software'}"
-        resp = requests.get("https://pt.wikipedia.org/w/api.php", params={
-            "action": "query", "list": "search", "srsearch": busca,
-            "srlimit": 2, "format": "json", "utf8": 1,
-        }, headers=HTTP_HEADERS, timeout=5)
-        resultados = resp.json().get("query", {}).get("search", [])
-        if resultados:
-            titulo = resultados[0]["title"]
-            resp2 = requests.get("https://pt.wikipedia.org/w/api.php", params={
-                "action": "query", "titles": titulo, "prop": "extracts",
-                "explaintext": True, "exintro": True, "format": "json", "utf8": 1,
-            }, headers=HTTP_HEADERS, timeout=5)
-            for page in resp2.json().get("query", {}).get("pages", {}).values():
-                if page.get("extract"):
-                    contexto += f"Wikipedia ({titulo}):\n{page['extract'][:2000]}\n\n"
-                    fontes.append("Wikipedia")
-    except Exception:
-        pass
-
-    # StackOverflow
-    try:
-        tag = f"[{lang}]" if lang else ""
-        resp = requests.get("https://api.stackexchange.com/2.3/search/excerpts", params={
-            "order": "desc", "sort": "relevance", "q": f"{topico} {tag}",
-            "site": "stackoverflow", "pagesize": 3,
-        }, headers=HTTP_HEADERS, timeout=5)
-        for item in resp.json().get("items", [])[:3]:
-            titulo = BeautifulSoup(item.get("title", ""), "html.parser").get_text()
-            corpo = BeautifulSoup(item.get("excerpt", ""), "html.parser").get_text()
-            contexto += f"StackOverflow: {titulo}\n{corpo[:300]}\n\n"
-        if resp.json().get("items"):
-            fontes.append("StackOverflow")
-    except Exception:
-        pass
-
-    # DuckDuckGo
-    try:
-        q = f"{topico} {lang} code" if lang else f"{topico} programming"
-        resp = requests.get("https://lite.duckduckgo.com/lite/", params={"q": q},
-                          headers=HTTP_HEADERS, timeout=8)
-        soup = BeautifulSoup(resp.text, "html.parser")
-        for i, link in enumerate(soup.select("a.result-link")[:5]):
-            contexto += f"Web: {link.get_text(strip=True)}\n"
-        if soup.select("a.result-link"):
-            fontes.append("DuckDuckGo")
-    except Exception:
-        pass
+    # Buscar tudo em paralelo (3x mais rápido)
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        futures = {
+            pool.submit(_buscar_wikipedia, topico, lang): "wiki",
+            pool.submit(_buscar_stackoverflow, topico, lang): "so",
+            pool.submit(_buscar_ddg, topico, lang): "ddg",
+        }
+        for future in as_completed(futures, timeout=6):
+            try:
+                ctx, fonte = future.result()
+                if ctx:
+                    contexto += ctx
+                    fontes.append(fonte)
+            except Exception:
+                pass
 
     return {"contexto": contexto[:5000], "fontes": fontes}
 
@@ -1547,4 +1597,4 @@ if __name__ == "__main__":
         print()
         print("=" * 55)
         print()
-        uvicorn.run(app, host=HOST, port=PORT)
+        uvicorn.run(app, host=HOST, port=PORT, log_level="warning", timeout_keep_alive=120)
