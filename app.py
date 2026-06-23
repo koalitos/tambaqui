@@ -575,7 +575,7 @@ class ModelManager:
 
             # Carregar modelo
             load_kwargs = {
-                "torch_dtype": dtype,
+                "dtype": dtype,
                 "trust_remote_code": True,
                 "low_cpu_mem_usage": True,
             }
@@ -596,7 +596,7 @@ class ModelManager:
                 device = "cpu"
                 dtype = torch.float16
                 self.device_nome = device
-                load_kwargs = {"torch_dtype": dtype, "trust_remote_code": True, "low_cpu_mem_usage": True}
+                load_kwargs = {"dtype": dtype, "trust_remote_code": True, "low_cpu_mem_usage": True}
                 self.model = AutoModelForCausalLM.from_pretrained(str(pasta), **load_kwargs)
 
             if not hasattr(self.model, "hf_device_map"):
