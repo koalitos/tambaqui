@@ -315,16 +315,14 @@ class ModelManager:
     # --- Download ---
 
     def baixar(self, nome: str) -> dict:
-        """Baixa modelo do HuggingFace."""
+        """Baixa modelo do HuggingFace com progresso real."""
         if nome in self.progresso_download:
             return {"status": "Já está baixando..."}
 
-        # Verificar se está no catálogo ou é um repo direto
         if nome in CATALOGO:
             repo = CATALOGO[nome]["repo"]
             destino = MODELOS_DIR / nome
         else:
-            # Repo direto: "Qwen/Qwen2.5-Coder-1.5B-Instruct"
             repo = nome
             destino = MODELOS_DIR / nome.split("/")[-1].lower()
             nome = destino.name
@@ -332,19 +330,63 @@ class ModelManager:
         if destino.exists() and any(destino.glob("*.safetensors")):
             return {"status": "Modelo já existe", "nome": nome}
 
-        self.progresso_download[nome] = {"status": "iniciando", "percent": 0}
+        self.progresso_download[nome] = {"status": "iniciando", "percent": 0, "arquivo": "", "velocidade": ""}
 
         def _download():
             try:
-                self.progresso_download[nome] = {"status": "baixando", "percent": 5}
-                from huggingface_hub import snapshot_download
-                snapshot_download(repo, local_dir=str(destino))
-                self.progresso_download[nome] = {"status": "concluído", "percent": 100}
+                from huggingface_hub import HfApi, hf_hub_download
+                api = HfApi()
+
+                # Listar arquivos do repo
+                self.progresso_download[nome] = {"status": "listando arquivos", "percent": 1, "arquivo": "", "velocidade": ""}
+                files = api.list_repo_files(repo)
+                total_files = len(files)
+                destino.mkdir(parents=True, exist_ok=True)
+
+                # Calcular tamanho total (se possível)
+                info = api.model_info(repo)
+                total_bytes = 0
+                file_sizes = {}
+                for s in info.siblings:
+                    if s.size:
+                        file_sizes[s.rfilename] = s.size
+                        total_bytes += s.size
+
+                baixado_bytes = 0
+
+                for i, fname in enumerate(files):
+                    arquivo_path = destino / fname
+                    if arquivo_path.exists():
+                        fsize = file_sizes.get(fname, arquivo_path.stat().st_size)
+                        baixado_bytes += fsize
+                        pct = int((baixado_bytes / total_bytes * 100)) if total_bytes else int((i + 1) / total_files * 100)
+                        self.progresso_download[nome] = {
+                            "status": "baixando", "percent": pct,
+                            "arquivo": f"{fname} (já existe)",
+                            "velocidade": f"{i+1}/{total_files} arquivos",
+                        }
+                        continue
+
+                    fsize = file_sizes.get(fname, 0)
+                    size_str = f" ({fsize / 1e9:.1f}GB)" if fsize > 1e9 else (f" ({fsize / 1e6:.0f}MB)" if fsize > 1e6 else "")
+                    pct = int((baixado_bytes / total_bytes * 100)) if total_bytes else int(i / total_files * 100)
+                    self.progresso_download[nome] = {
+                        "status": "baixando", "percent": max(pct, 1),
+                        "arquivo": f"{fname}{size_str}",
+                        "velocidade": f"{i+1}/{total_files} arquivos",
+                    }
+
+                    # Baixar arquivo individual
+                    hf_hub_download(repo, fname, local_dir=str(destino))
+                    baixado_bytes += fsize
+
+                self.progresso_download[nome] = {"status": "concluído", "percent": 100, "arquivo": "", "velocidade": ""}
                 logger.info(f"✅ Modelo baixado: {nome}")
-                time.sleep(2)
+                time.sleep(3)
                 del self.progresso_download[nome]
+
             except Exception as e:
-                self.progresso_download[nome] = {"status": f"erro: {e}", "percent": -1}
+                self.progresso_download[nome] = {"status": f"erro: {e}", "percent": -1, "arquivo": "", "velocidade": ""}
                 logger.error(f"Erro ao baixar {nome}: {e}")
 
         threading.Thread(target=_download, daemon=True).start()
@@ -1437,17 +1479,31 @@ async function load(){
             ${m.ativo?`<button class="btn btn-r btn-s" onclick="descarregar()">Descarregar</button>`:''}
         </div>`).join('')}
 
-    // Catálogo
+    // Catálogo com barra de progresso
     const cat=document.getElementById('catalogo');
     cat.innerHTML=d2.catalogo.map(m=>{
         const dl=d.downloads&&d.downloads[m.nome];
-        let btn='';
-        if(m.baixado)btn='<span style="color:var(--gn);font-size:12px">✅ Baixado</span>';
-        else if(m.baixando||dl)btn=`<span style="color:var(--or);font-size:12px">Baixando...</span>`;
-        else btn=`<button class="btn btn-g btn-s" onclick="baixar('${m.nome}')">Baixar</button>`;
-        return`<div class="mi">
+        let btn='',prog='';
+        if(m.baixado){
+            btn='<span style="color:var(--gn);font-size:12px">✅ Baixado</span>';
+        }else if(dl){
+            const pct=dl.percent||0;
+            const arq=dl.arquivo||'';
+            const vel=dl.velocidade||'';
+            const st=dl.status||'';
+            const cor=pct<0?'var(--rd)':pct>=100?'var(--gn)':'var(--ac)';
+            btn=`<span style="color:var(--or);font-size:12px;min-width:50px;text-align:right">${pct>=0?pct+'%':st}</span>`;
+            prog=`<div style="margin-top:6px">
+                <div class="prog"><div class="bar" style="width:${Math.max(pct,0)}%;background:${cor}"></div></div>
+                <div style="font-size:10px;color:var(--t2);margin-top:3px">${arq} ${vel?'| '+vel:''}</div>
+            </div>`;
+        }else{
+            btn=`<button class="btn btn-g btn-s" onclick="baixar('${m.nome}')">Baixar</button>`;
+        }
+        return`<div class="mi" style="flex-wrap:wrap">
             <div class="nm">${m.nome}<br><span style="font-size:11px;color:var(--t2)">${m.desc} | ${m.params} | ${m.ram} RAM</span></div>
             ${btn}
+            ${prog?`<div style="width:100%">${prog}</div>`:''}
         </div>`}).join('');
 }
 
@@ -1531,7 +1587,13 @@ async function deletarUser(u){
     await fetch('/api/auth/users/'+u,{method:'DELETE'});toast('Deletado');loadUsers();
 }
 
-load();loadUsers();loadApiKey();setInterval(load,5000);
+load();loadUsers();loadApiKey();
+// Refresh mais rápido quando tem download ativo
+setInterval(()=>{
+    const hasDownload=document.querySelector('.bar');
+    load();
+    if(!hasDownload)return;
+},2000);
 </script>
 </body></html>"""
 
