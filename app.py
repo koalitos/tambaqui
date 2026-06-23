@@ -1167,19 +1167,22 @@ HTML_CHAT = """<!DOCTYPE html>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#0d1117;--sf:#161b22;--bd:#30363d;--tx:#e6edf3;--t2:#8b949e;--ac:#58a6ff;--gn:#3fb950;--or:#d29922;--rd:#f85149}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh;display:flex}
-.side{width:260px;background:var(--sf);border-right:1px solid var(--bd);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
-.side-hdr{padding:14px 16px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:8px}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--tx);height:100vh;display:flex;overflow:hidden}
+.side{width:260px;background:var(--sf);border-right:1px solid var(--bd);display:flex;flex-direction:column;flex-shrink:0;height:100vh}
+.side-hdr{padding:14px 16px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:8px;flex-shrink:0}
 .side-hdr h2{font-size:14px;flex:1}.side-hdr h2 span{color:var(--ac)}
 .side-btn{background:var(--ac);color:#000;border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer}
 .side-list{flex:1;overflow-y:auto;padding:8px}
-.si{padding:8px 10px;border-radius:6px;cursor:pointer;margin-bottom:2px;font-size:13px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.si{padding:8px 10px;border-radius:6px;cursor:pointer;margin-bottom:2px;font-size:13px;color:var(--t2);display:flex;align-items:center;gap:6px;position:relative}
 .si:hover{background:var(--bg)}.si.act{background:var(--bg);color:var(--tx);border:1px solid var(--bd)}
-.si .st-date{font-size:10px;color:var(--t2)}
-.side-foot{padding:10px 16px;border-top:1px solid var(--bd);font-size:11px;color:var(--t2)}
+.si .si-txt{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.si .st-date{font-size:10px;color:var(--t2);display:block}
+.si .si-del{display:none;background:none;border:none;color:var(--rd);cursor:pointer;font-size:14px;padding:0 4px;flex-shrink:0}
+.si:hover .si-del{display:block}
+.side-foot{padding:10px 16px;border-top:1px solid var(--bd);font-size:11px;color:var(--t2);flex-shrink:0;display:flex;gap:8px;flex-wrap:wrap}
 .side-foot a{color:var(--ac);text-decoration:none}
-.main{flex:1;display:flex;flex-direction:column;min-width:0}
-.hdr{background:var(--sf);border-bottom:1px solid var(--bd);padding:10px 20px;display:flex;align-items:center;gap:12px}
+.main{flex:1;display:flex;flex-direction:column;min-width:0;height:100vh;overflow:hidden}
+.hdr{background:var(--sf);border-bottom:1px solid var(--bd);padding:10px 20px;display:flex;align-items:center;gap:12px;flex-shrink:0}
 .hdr h1{font-size:16px} .hdr h1 span{color:var(--ac)}
 .hdr .tag{background:var(--ac);color:#000;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600}
 .hdr a{margin-left:auto;color:var(--t2);text-decoration:none;font-size:12px;padding:4px 10px;border:1px solid var(--bd);border-radius:6px}
@@ -1200,7 +1203,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .ft{font-size:11px;color:var(--t2);margin-top:6px;padding-top:6px;border-top:1px solid var(--bd);display:flex;gap:4px;flex-wrap:wrap}
 .ft span{background:var(--bg);padding:1px 6px;border-radius:3px;border:1px solid var(--bd)}
 @keyframes fi{from{opacity:0;transform:translateY(8px)}to{opacity:1}}
-.inp{background:var(--sf);border-top:1px solid var(--bd);padding:12px 20px}
+.inp{background:var(--sf);border-top:1px solid var(--bd);padding:12px 20px;flex-shrink:0}
 .ibox{max-width:960px;margin:0 auto;display:flex;gap:10px}
 .ibox textarea{flex:1;background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:12px;color:var(--tx);font-size:14px;outline:none;resize:none;min-height:44px;max-height:200px;font-family:inherit}
 .ibox textarea:focus{border-color:var(--ac)}
@@ -1224,7 +1227,11 @@ pre:hover .cp{opacity:1}.cp:hover{background:var(--ac);color:#000}
         <button class="side-btn" onclick="novaSessao()">+ Nova</button>
     </div>
     <div class="side-list" id="sessList"></div>
-    <div class="side-foot"><a href="/admin">Admin</a> | <a href="#" onclick="logout()">Sair</a></div>
+    <div class="side-foot">
+        <a href="#" onclick="showConfig()">Minha conta</a>
+        <a href="/admin">Admin</a>
+        <a href="#" onclick="logout()">Sair</a>
+    </div>
 </div>
 <div class="main">
 <div class="hdr">
@@ -1266,16 +1273,18 @@ async function loadSess(){
         if(!d.sessoes||!d.sessoes.length){el.innerHTML='<p style="padding:10px;color:var(--t2);font-size:12px">Nenhuma sessão</p>';return}
         el.innerHTML=d.sessoes.map(s=>{
             const act=s.session_id===sid?'act':'';
-            const dt=s.atualizada_em?new Date(s.atualizada_em).toLocaleDateString('pt-BR',''):'';
-            return`<div class="si ${act}" onclick="carregarSessao('${s.session_id}')" title="${esc(s.titulo)}">
-                ${esc(s.titulo||'Sem título')}<br><span class="st-date">${s.mensagens} msgs - ${dt}</span>
+            const dt=s.atualizada_em?new Date(s.atualizada_em).toLocaleDateString('pt-BR'):'';
+            return`<div class="si ${act}">
+                <div class="si-txt" onclick="carregarSessao('${s.session_id}')">
+                    ${esc(s.titulo||'Sem título')}<span class="st-date">${s.mensagens} msgs - ${dt}</span>
+                </div>
+                <button class="si-del" onclick="event.stopPropagation();delSessao('${s.session_id}')" title="Apagar">✕</button>
             </div>`}).join('');
     }catch(e){}
 }
 
 async function carregarSessao(id){
     sid=id;localStorage.setItem('t_sid',sid);
-    // Carregar histórico da sessão
     try{
         const r=await fetch('/api/sessoes/'+id);const d=await r.json();
         const ch=document.getElementById('chat');
@@ -1295,11 +1304,55 @@ async function carregarSessao(id){
     loadSess();
 }
 
+async function delSessao(id){
+    if(!confirm('Apagar esta conversa?'))return;
+    await fetch('/api/sessoes/'+id,{method:'DELETE'});
+    if(sid===id){sid=null;localStorage.removeItem('t_sid');
+        document.getElementById('chat').innerHTML=`<div class="msg a"><div class="av">🐟</div><div class="bb"><p>Conversa apagada.</p></div></div>`}
+    loadSess();
+}
+
 function novaSessao(){
     sid=null;localStorage.removeItem('t_sid');
     document.getElementById('chat').innerHTML=`<div class="msg a"><div class="av">🐟</div><div class="bb">
         <p><strong>Nova conversa</strong></p></div></div>`;
     loadSess();
+}
+
+// Config do user
+async function showConfig(){
+    try{
+        const r=await fetch('/api/auth/api-key');
+        if(r.status!==200){alert('Faça login primeiro');return}
+        const d=await r.json();
+        const me=await(await fetch('/api/auth/me')).json();
+        const ch=document.getElementById('chat');
+        ch.innerHTML=`<div style="max-width:600px;margin:20px auto">
+            <h2 style="color:var(--ac);margin-bottom:16px">Minha Conta</h2>
+            <div style="background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:20px">
+                <p><strong>Usuário:</strong> ${me.username} ${me.admin?'(admin)':''}</p>
+                <p style="margin-top:10px"><strong>API Key:</strong></p>
+                <code style="display:block;background:var(--bg);padding:8px 12px;border-radius:4px;margin:4px 0;user-select:all;word-break:break-all">${d.api_key}</code>
+                <p style="margin-top:16px"><strong>Trocar senha:</strong></p>
+                <div style="display:flex;gap:8px;margin-top:6px">
+                    <input type="password" id="cfgPass" placeholder="Nova senha" style="background:var(--bg);border:1px solid var(--bd);border-radius:6px;padding:6px 10px;color:var(--tx);flex:1">
+                    <button onclick="trocarMinhaSenha('${me.username}')" style="background:var(--ac);color:#000;border:none;border-radius:6px;padding:6px 14px;font-weight:600;cursor:pointer">Salvar</button>
+                </div>
+                <p style="margin-top:16px"><strong>Conectar API:</strong></p>
+                <pre style="background:var(--bg);padding:10px;border-radius:6px;margin-top:6px;font-size:12px"><code>OPENAI_API_BASE=${location.origin}/v1\nOPENAI_API_KEY=${d.api_key}</code></pre>
+            </div>
+            <button onclick="novaSessao()" style="margin-top:16px;background:var(--bd);color:var(--tx);border:none;border-radius:6px;padding:8px 16px;cursor:pointer">Voltar ao chat</button>
+        </div>`;
+    }catch(e){alert('Erro: '+e)}
+}
+
+async function trocarMinhaSenha(user){
+    const p=document.getElementById('cfgPass').value;
+    if(!p){alert('Digite a nova senha');return}
+    const r=await fetch('/api/auth/trocar-senha',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:user,nova_senha:p})});
+    const d=await r.json();
+    alert(d.ok?'Senha alterada!':d.erro||'Erro');
+    document.getElementById('cfgPass').value='';
 }
 
 async function logout(){
