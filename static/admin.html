@@ -63,7 +63,10 @@ details pre{background:var(--bg);padding:12px;margin:6px 0;border-radius:8px;fon
 <div class="card"><h2>Device (CPU/GPU)</h2>
 <p class="desc">Escolha onde rodar o modelo. GPU é ~10-50x mais rápido.</p>
 <div class="sel-group" id="deviceList"></div>
-<p id="deviceAviso" style="font-size:12px;color:var(--orange);margin-top:8px;display:none">Recarregue o modelo pra aplicar.</p></div>
+<div id="deviceAviso" style="margin-top:10px;display:none">
+    <button class="btn btn-blue" onclick="recarregarModelo()">Recarregar modelo no novo device</button>
+    <span style="font-size:12px;color:var(--orange);margin-left:8px">Device trocado - precisa recarregar pra aplicar</span>
+</div></div>
 
 <div class="card"><h2>Economia de Energia</h2>
 <p class="desc">Descarrega o modelo após ficar idle. Re-carrega no próximo request.</p>
@@ -125,18 +128,49 @@ async function load(){
     const cat=document.getElementById('catalogo');
     cat.innerHTML=d2.catalogo.map(m=>{
         const dl=d.downloads&&d.downloads[m.nome];
+        const baixando=dl||m.baixando;
         let btn='',prog='';
-        if(m.baixado){btn='<span class="badge">Baixado</span>'}
-        else if(dl){const pct=dl.percent||0;const cor=pct<0?'var(--red)':pct>=100?'var(--green)':'var(--blue)';
-            btn=`<span style="color:var(--orange);font-size:12px">${pct>=0?pct+'%':dl.status}</span>`;
-            prog=`<div style="margin-top:6px"><div class="prog"><div class="bar" style="width:${Math.max(pct,0)}%;background:${cor}"></div></div><div style="font-size:10px;color:var(--t3);margin-top:3px">${dl.arquivo||''} ${dl.velocidade?'· '+dl.velocidade:''}</div></div>`}
+        if(m.baixado&&!baixando){btn='<span class="badge">Baixado</span>'}
+        else if(baixando){
+            const pct=dl?dl.percent||0:0;const cor=pct<0?'var(--red)':pct>=100?'var(--green)':'var(--blue)';
+            const arq=dl?dl.arquivo||'':'iniciando...';const vel=dl?dl.velocidade||'':'';const st=dl?dl.status||'':'baixando';
+            btn=`<span style="color:var(--orange);font-size:12px;font-weight:600">${pct>=0?pct+'%':st}</span>`;
+            prog=`<div style="margin-top:6px"><div class="prog"><div class="bar" style="width:${Math.max(pct,2)}%;background:${cor}"></div></div><div style="font-size:10px;color:var(--t3);margin-top:3px">${arq} ${vel?'· '+vel:''}</div></div>`}
         else{btn=`<button class="btn btn-green btn-sm" onclick="baixar('${m.nome}')">Baixar</button>`}
         return`<div class="mi" style="flex-wrap:wrap"><div class="nm">${m.nome}<small>${m.desc} · ${m.params} · ${m.ram} RAM</small></div>${btn}${prog?`<div style="width:100%">${prog}</div>`:''}</div>`}).join('');
 }
-async function baixar(n){await fetch('/api/modelos/baixar?nome='+n,{method:'POST'});toast('Download iniciado');load()}
-async function carregar(n){await fetch('/api/modelos/carregar?nome='+n,{method:'POST'});toast('Carregando...');load()}
+let downloadPolling=null;
+async function baixar(n){
+    const r=await fetch('/api/modelos/baixar?nome='+n,{method:'POST'});
+    const d=await r.json();
+    toast(d.status||'Download iniciado');
+    if(d.status==='Modelo já existe'){load();return}
+    // Polling rápido durante download
+    if(downloadPolling)clearInterval(downloadPolling);
+    // Primeiro poll após 1s (dar tempo da thread iniciar)
+    setTimeout(load,1000);
+    downloadPolling=setInterval(async()=>{
+        await load();
+        const r2=await fetch('/api/status');const d2=await r2.json();
+        if(!d2.downloads||Object.keys(d2.downloads).length===0){
+            clearInterval(downloadPolling);downloadPolling=null;
+            toast('Download concluído!');load();
+        }
+    },2000);
+}
+async function carregar(n){await fetch('/api/modelos/carregar?nome='+n,{method:'POST'});toast('Carregando...');setTimeout(load,3000)}
 async function descarregar(){await fetch('/api/modelos/descarregar',{method:'POST'});toast('Descarregado');load()}
 async function deletar(n){if(!confirm('Remover '+n+'?'))return;await fetch('/api/modelos/'+n,{method:'DELETE'});toast('Removido');load()}
+async function recarregarModelo(){
+    // Descarrega e recarrega no novo device
+    const r=await fetch('/api/status');const d=await r.json();
+    if(!d.modelo_ativo){toast('Nenhum modelo ativo','var(--red)');return}
+    toast('Recarregando no novo device...');
+    await fetch('/api/modelos/descarregar',{method:'POST'});
+    await fetch('/api/modelos/carregar?nome='+d.modelo_ativo,{method:'POST'});
+    document.getElementById('deviceAviso').style.display='none';
+    setTimeout(load,3000);
+}
 
 async function loadDevices(){try{const r=await fetch('/api/devices');const d=await r.json();
     document.getElementById('deviceList').innerHTML=d.devices.map(dv=>`<div class="mi sel-item ${dv.id===d.atual?'act':''}" onclick="setDevice('${dv.id}')"><div class="nm">${dv.id===d.atual?'●':'○'} ${dv.nome}<small>${dv.info}</small></div></div>`).join('')}catch(e){}}
