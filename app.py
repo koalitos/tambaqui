@@ -918,22 +918,21 @@ async def api_deletar_user(username: str, request: Request):
 
 @app.get("/api/auth/api-key")
 async def api_get_key(request: Request):
-    """Retorna a API key do user logado."""
+    """Retorna a API key do user logado + config de conexão com URL real."""
     user = _get_user_from_request(request)
     if not user:
         return JSONResponse(status_code=401, content={"erro": "Não autenticado"})
     key = user_get_api_key(user["username"])
-    modelo = manager.modelo_ativo or "nenhum"
+    modelo = manager.modelo_ativo or ""
+    # URL real: pegar do request (o que o browser usou pra chegar aqui)
+    host = request.headers.get("host", f"localhost:{PORT}")
+    scheme = request.headers.get("x-forwarded-proto", "http")
+    base = f"{scheme}://{host}"
     return {
         "api_key": key,
         "username": user["username"],
-        "config": {
-            "base_url": f"http://localhost:{PORT}/v1",
-            "api_key": key,
-            "model": modelo,
-        },
-        "env": f"OPENAI_API_BASE=http://localhost:{PORT}/v1\nOPENAI_API_KEY={key}",
-        "curl": f'curl http://localhost:{PORT}/v1/chat/completions \\\n  -H "Content-Type: application/json" \\\n  -H "Authorization: Bearer {key}" \\\n  -d \'{{"model":"{modelo}","messages":[{{"role":"user","content":"oi"}}]}}\'',
+        "base_url": f"{base}/v1",
+        "model": modelo,
     }
 
 
@@ -1663,32 +1662,80 @@ async function setDevice(id){
     loadDevices();load();
 }
 
-// API Key + Config
+// API Key + Config de Conexão
 async function loadApiKey(){
     try{
         const r=await fetch('/api/auth/api-key');
         if(r.status!==200)return;
         const d=await r.json();
+        const base=d.base_url||`${location.origin}/v1`;
+        const key=d.api_key;
+        const modelo=d.model||'';
+
+        // Card: Sua API Key
         document.getElementById('apiKeyInfo').innerHTML=`
-            <p>API Key: <code style="user-select:all">${d.api_key}</code>
-            <button class="cp" style="position:static;opacity:1;margin-left:4px" onclick="navigator.clipboard.writeText('${d.api_key}');this.textContent='✓'">Copiar</button></p>
-            <p style="margin-top:4px;font-size:12px;color:var(--t2)">User: ${d.username}</p>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <code style="background:var(--bg);padding:6px 12px;border-radius:4px;user-select:all;word-break:break-all;flex:1">${key}</code>
+                <button class="btn btn-a btn-s" onclick="navigator.clipboard.writeText('${key}');this.textContent='Copiado!';setTimeout(()=>this.textContent='Copiar',2000)">Copiar</button>
+            </div>
+            <p style="margin-top:6px;font-size:12px;color:var(--t2)">User: ${d.username} | Modelo: ${modelo||'nenhum carregado'}</p>
         `;
-        const c=d.config;
+
+        // Card: Como Conectar
         document.getElementById('connectInfo').innerHTML=`
-            <p><strong>Variáveis de ambiente:</strong></p>
-            <pre style="background:var(--bg);padding:10px;margin:8px 0;border-radius:4px"><code>OPENAI_API_BASE=${c.base_url}
-OPENAI_API_KEY=${c.api_key}</code></pre>
-            <p><strong>Modelo ativo:</strong> <code>${c.model||'nenhum'}</code></p>
-            <p style="margin-top:10px"><strong>Teste com curl:</strong></p>
-            <pre style="background:var(--bg);padding:10px;margin:8px 0;border-radius:4px;white-space:pre-wrap;font-size:12px"><code>${d.curl}</code></pre>
-            <p style="margin-top:10px"><strong>Clients compatíveis:</strong></p>
-            <ul style="margin:4px 0 0 16px;font-size:13px;color:var(--t2)">
-                <li>Open WebUI - coloque a Base URL e API Key</li>
-                <li>Continue.dev (VS Code) - configure provider custom</li>
-                <li>LibreChat - adicione endpoint OpenAI custom</li>
-                <li>Qualquer client com suporte a API OpenAI</li>
-            </ul>
+            <h3 style="color:var(--ac);font-size:14px;margin-bottom:10px">1. Copie esses dois valores</h3>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
+                <tr><td style="border:1px solid var(--bd);padding:8px;color:var(--t2);width:120px">Base URL</td>
+                    <td style="border:1px solid var(--bd);padding:8px"><code style="user-select:all">${base}</code>
+                    <button class="cp" style="position:static;opacity:1;margin-left:4px" onclick="navigator.clipboard.writeText('${base}');this.textContent='✓'">Copiar</button></td></tr>
+                <tr><td style="border:1px solid var(--bd);padding:8px;color:var(--t2)">API Key</td>
+                    <td style="border:1px solid var(--bd);padding:8px"><code style="user-select:all">${key}</code>
+                    <button class="cp" style="position:static;opacity:1;margin-left:4px" onclick="navigator.clipboard.writeText('${key}');this.textContent='✓'">Copiar</button></td></tr>
+                ${modelo?`<tr><td style="border:1px solid var(--bd);padding:8px;color:var(--t2)">Model</td>
+                    <td style="border:1px solid var(--bd);padding:8px"><code style="user-select:all">${modelo}</code>
+                    <button class="cp" style="position:static;opacity:1;margin-left:4px" onclick="navigator.clipboard.writeText('${modelo}');this.textContent='✓'">Copiar</button></td></tr>`:''}
+            </table>
+
+            <h3 style="color:var(--ac);font-size:14px;margin-bottom:8px">2. Cole no seu client</h3>
+
+            <details style="margin-bottom:10px"><summary style="cursor:pointer;color:var(--tx);font-weight:600;font-size:13px">Terminal / Variáveis de ambiente</summary>
+            <pre style="background:var(--bg);padding:10px;margin:8px 0;border-radius:4px"><code>export OPENAI_API_BASE=${base}
+export OPENAI_API_KEY=${key}</code></pre></details>
+
+            <details style="margin-bottom:10px"><summary style="cursor:pointer;color:var(--tx);font-weight:600;font-size:13px">Open WebUI</summary>
+            <p style="font-size:13px;color:var(--t2);padding:8px 0">Configurações → Conexões → Adicionar:<br>
+            URL: <code>${base}</code><br>Key: <code>${key}</code></p></details>
+
+            <details style="margin-bottom:10px"><summary style="cursor:pointer;color:var(--tx);font-weight:600;font-size:13px">Continue.dev (VS Code)</summary>
+            <pre style="background:var(--bg);padding:10px;margin:8px 0;border-radius:4px;font-size:12px"><code>{
+  "models": [{
+    "title": "Tambaqui",
+    "provider": "openai",
+    "model": "${modelo||'*'}",
+    "apiBase": "${base}",
+    "apiKey": "${key}"
+  }]
+}</code></pre></details>
+
+            <details style="margin-bottom:10px"><summary style="cursor:pointer;color:var(--tx);font-weight:600;font-size:13px">curl (teste rápido)</summary>
+            <pre style="background:var(--bg);padding:10px;margin:8px 0;border-radius:4px;font-size:12px;white-space:pre-wrap"><code>curl ${base}/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer ${key}" \\
+  -d '{"model":"${modelo||'*'}","messages":[{"role":"user","content":"olá"}]}'</code></pre></details>
+
+            <details style="margin-bottom:10px"><summary style="cursor:pointer;color:var(--tx);font-weight:600;font-size:13px">Python</summary>
+            <pre style="background:var(--bg);padding:10px;margin:8px 0;border-radius:4px;font-size:12px"><code>from openai import OpenAI
+
+client = OpenAI(
+    base_url="${base}",
+    api_key="${key}",
+)
+
+resp = client.chat.completions.create(
+    model="${modelo||'*'}",
+    messages=[{"role": "user", "content": "olá"}],
+)
+print(resp.choices[0].message.content)</code></pre></details>
         `;
     }catch(e){}
 }
