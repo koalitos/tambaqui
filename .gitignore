@@ -1,0 +1,27 @@
+# Modelos (GB - nunca subir)
+modelos/
+meus_modelos/
+meus_tokenizers/
+
+# Dados de usuario
+dados/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# Sistema
+.DS_Store
+*.egg-info
+.env
+
+# IDE
+.vscode/
+.idea/
+
+# Temp
+*.tmp
+*.log

@@ -1,0 +1,49 @@
+name: tambaqui
+services:
+  tambaqui:
+    image: tambaqui:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tambaqui
+    restart: unless-stopped
+    ports:
+      - target: 8000
+        published: "8000"
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: /DATA/AppData/tambaqui/modelos
+        target: /app/modelos
+      - type: bind
+        source: /DATA/AppData/tambaqui/dados
+        target: /app/dados
+    environment:
+      PYTHONUNBUFFERED: "1"
+      TAMBAQUI_ADMIN_USER: admin
+      TAMBAQUI_ADMIN_PASS: tambaqui
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: tambaqui
+  store_app_id: tambaqui
+  category: AI
+  author: Tambaqui
+  developer: Tambaqui
+  title:
+    en_us: "Tambaqui - AI Code Assistant"
+    pt_br: "Tambaqui - IA de Código"
+  description:
+    en_us: "Brazilian AI coding assistant with OpenAI-compatible API. Download HuggingFace models, chat with web search, manage via admin panel."
+    pt_br: "IA brasileira de código com API OpenAI-compatível. Baixe modelos HuggingFace, chat com busca web, gerencie pelo admin."
+  tagline:
+    en_us: "Local AI for coding"
+    pt_br: "IA local para código"
+  port_map: "8000"
+  scheme: http
+  tips:
+    before_install:
+      en_us: "Default login: admin / tambaqui. Change password after first login."
+      pt_br: "Login padrão: admin / tambaqui. Troque a senha após primeiro acesso."

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Tambaqui - IA Brasileira de Código</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0d1117;--sf:#161b22;--bd:#30363d;--tx:#e6edf3;--t2:#8b949e;--ac:#58a6ff;--gn:#3fb950;--or:#d29922}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--tx);line-height:1.7}
+a{color:var(--ac);text-decoration:none}a:hover{text-decoration:underline}
+.hero{text-align:center;padding:80px 20px 60px}
+.hero h1{font-size:48px;margin-bottom:12px}.hero h1 span{color:var(--ac)}
+.hero p{font-size:18px;color:var(--t2);max-width:600px;margin:0 auto 30px}
+.badges{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:30px}
+.badge{background:var(--sf);border:1px solid var(--bd);padding:4px 12px;border-radius:20px;font-size:13px;color:var(--t2)}
+.badge.g{border-color:var(--gn);color:var(--gn)}
+.cta{display:inline-block;background:var(--ac);color:#000;padding:14px 32px;border-radius:8px;font-size:16px;font-weight:700;margin:8px}
+.cta:hover{background:#79b8ff;text-decoration:none}
+.cta.sec{background:transparent;border:2px solid var(--ac);color:var(--ac)}
+.cta.sec:hover{background:var(--ac);color:#000}
+
+.container{max-width:800px;margin:0 auto;padding:0 20px}
+section{padding:60px 0;border-top:1px solid var(--bd)}
+section h2{font-size:28px;margin-bottom:20px;color:var(--ac)}
+section h3{font-size:18px;margin:24px 0 8px;color:var(--tx)}
+
+pre{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:16px 20px;overflow-x:auto;margin:12px 0;position:relative}
+code{font-family:'SF Mono',Consolas,monospace;font-size:14px;line-height:1.6}
+.copy{position:absolute;top:8px;right:8px;background:var(--bd);color:var(--t2);border:none;border-radius:4px;padding:3px 10px;font-size:12px;cursor:pointer;opacity:0;transition:.2s}
+pre:hover .copy{opacity:1}.copy:hover{background:var(--ac);color:#000}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin:20px 0}
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:20px}
+.card h4{color:var(--ac);margin-bottom:8px}
+.card p{font-size:14px;color:var(--t2)}
+
+.tab-bar{display:flex;gap:0;margin-bottom:0;border-bottom:2px solid var(--bd)}
+.tab{padding:10px 20px;cursor:pointer;color:var(--t2);font-size:14px;font-weight:600;border-bottom:2px solid transparent;margin-bottom:-2px}
+.tab.active{color:var(--ac);border-color:var(--ac)}
+.tab-content{display:none;padding-top:16px}.tab-content.active{display:block}
+
+table{width:100%;border-collapse:collapse;margin:12px 0}
+th,td{border:1px solid var(--bd);padding:8px 12px;text-align:left;font-size:14px}
+th{background:var(--sf);color:var(--ac)}
+
+footer{text-align:center;padding:40px 20px;color:var(--t2);font-size:13px;border-top:1px solid var(--bd)}
+</style>
+</head>
+<body>
+
+<div class="hero">
+    <h1>🐟 <span>Tambaqui</span></h1>
+    <p>IA brasileira de código. Roda local, API OpenAI-compatível, baixa modelos HuggingFace, admin web.</p>
+    <div class="badges">
+        <span class="badge g">Open Source</span>
+        <span class="badge">API OpenAI</span>
+        <span class="badge">HuggingFace</span>
+        <span class="badge">Docker</span>
+        <span class="badge">Linux/macOS</span>
+    </div>
+    <a href="#instalar" class="cta">Instalar Agora</a>
+    <a href="https://github.com/koalitos/tambaqui" class="cta sec">GitHub</a>
+</div>
+
+<div class="container">
+
+<section>
+<h2>O que é</h2>
+<div class="grid">
+    <div class="card"><h4>API OpenAI</h4><p>Compatível com qualquer client que use a API da OpenAI. Continue.dev, Open WebUI, LibreChat, etc.</p></div>
+    <div class="card"><h4>Modelos HuggingFace</h4><p>Baixe modelos de código (Qwen, DeepSeek, CodeLlama) direto pelo admin web.</p></div>
+    <div class="card"><h4>Pre-loaded</h4><p>Modelo fica quente na RAM como shaders de jogo. Warmup automático no boot.</p></div>
+    <div class="card"><h4>Busca Web</h4><p>Pesquisa em Wikipedia, StackOverflow, documentações oficiais e DuckDuckGo.</p></div>
+    <div class="card"><h4>Admin Web</h4><p>Gerencie modelos, users, sessões e monitore CPU/RAM pelo browser.</p></div>
+    <div class="card"><h4>Streaming</h4><p>Respostas aparecem token a token em tempo real. Chat web e API.</p></div>
+</div>
+</section>
+
+<section id="instalar">
+<h2>Instalar</h2>
+
+<div class="tab-bar">
+    <div class="tab active" onclick="showTab('linux')">Linux/macOS</div>
+    <div class="tab" onclick="showTab('docker')">Docker</div>
+    <div class="tab" onclick="showTab('casaos')">CasaOS</div>
+</div>
+
+<div class="tab-content active" id="tab-linux">
+<h3>1. Clonar e instalar</h3>
+<pre><code>git clone https://github.com/koalitos/tambaqui.git
+cd tambaqui
+bash install.sh</code><button class="copy" onclick="cp(this)">Copiar</button></pre>
+<p>O instalador vai:</p>
+<ul style="margin:8px 0 8px 20px;color:var(--t2)">
+    <li>Instalar Python se necessário</li>
+    <li>Criar venv e instalar dependências</li>
+    <li>Baixar modelo leve (Qwen 0.5B - ~1GB)</li>
+    <li>Pedir pra criar o admin</li>
+</ul>
+
+<h3>2. Rodar</h3>
+<pre><code>./tambaqui</code><button class="copy" onclick="cp(this)">Copiar</button></pre>
+<p>Acesse <code>http://localhost:8000</code></p>
+
+<h3>3. Chat no terminal</h3>
+<pre><code>./tambaqui chat</code><button class="copy" onclick="cp(this)">Copiar</button></pre>
+</div>
+
+<div class="tab-content" id="tab-docker">
+<h3>1. Clonar e subir</h3>
+<pre><code>git clone https://github.com/koalitos/tambaqui.git
+cd tambaqui
+docker compose up -d</code><button class="copy" onclick="cp(this)">Copiar</button></pre>
+
+<h3>2. Acessar</h3>
+<p>Abra <code>http://localhost:8000</code></p>
+<p>Login: <code>admin</code> / <code>tambaqui</code></p>
+
+<h3>3. Trocar senha</h3>
+<pre><code>docker exec tambaqui python3 app.py user senha admin SuaNovaSenha</code><button class="copy" onclick="cp(this)">Copiar</button></pre>
+
+<h3>4. Baixar modelo</h3>
+<p>Acesse <code>/admin</code> e clique "Baixar" no modelo desejado.</p>
+</div>
+
+<div class="tab-content" id="tab-casaos">
+<h3>1. Instalar via terminal SSH</h3>
+<pre><code>cd /DATA/AppData
+git clone https://github.com/koalitos/tambaqui.git
+cd tambaqui
+docker compose up -d</code><button class="copy" onclick="cp(this)">Copiar</button></pre>
+
+<h3>2. Acessar</h3>
+<p>Abra <code>http://ip-do-casaos:8000</code></p>
+<p>Login: <code>admin</code> / <code>tambaqui</code></p>
+
+<h3>3. Dados persistentes</h3>
+<p>Modelos e dados ficam em <code>/DATA/AppData/tambaqui/</code></p>
+</div>
+</section>
+
+<section>
+<h2>API OpenAI</h2>
+<p>Funciona com qualquer tool que suporte a API da OpenAI. Só trocar a base URL:</p>
+<pre><code>export OPENAI_API_BASE=http://localhost:8000/v1
+export OPENAI_API_KEY=seu-token-do-login</code><button class="copy" onclick="cp(this)">Copiar</button></pre>
+
+<h3>Exemplo curl</h3>
+<pre><code>curl http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer seu-token" \
+  -d '{
+    "messages": [{"role": "user", "content": "crie um hello world em python"}],
+    "stream": true
+  }'</code><button class="copy" onclick="cp(this)">Copiar</button></pre>
+
+<h3>Endpoints</h3>
+<table>
+<tr><th>Método</th><th>Endpoint</th><th>Descrição</th></tr>
+<tr><td>GET</td><td><code>/v1/models</code></td><td>Listar modelos</td></tr>
+<tr><td>POST</td><td><code>/v1/chat/completions</code></td><td>Chat (com streaming)</td></tr>
+<tr><td>POST</td><td><code>/api/chat</code></td><td>Chat Tambaqui (com busca web)</td></tr>
+<tr><td>POST</td><td><code>/api/auth/login</code></td><td>Login (retorna token)</td></tr>
+<tr><td>GET</td><td><code>/api/status</code></td><td>Status do sistema</td></tr>
+</table>
+</section>
+
+<section>
+<h2>Modelos</h2>
+<p>Baixe pelo admin web (<code>/admin</code>) ou pelo catálogo:</p>
+<table>
+<tr><th>Modelo</th><th>RAM</th><th>Params</th><th>Uso</th></tr>
+<tr><td>qwen2.5-coder-0.5b</td><td>1 GB</td><td>0.5B</td><td>Qualquer PC</td></tr>
+<tr><td>qwen2.5-coder-1.5b</td><td>3 GB</td><td>1.5B</td><td>PCs leves</td></tr>
+<tr><td>qwen2.5-coder-3b</td><td>6 GB</td><td>3B</td><td>Balanceado</td></tr>
+<tr><td>qwen2.5-coder-7b</td><td>14 GB</td><td>7B</td><td>Completo</td></tr>
+<tr><td>deepseek-coder-1.3b</td><td>3 GB</td><td>1.3B</td><td>Código leve</td></tr>
+<tr><td>deepseek-coder-6.7b</td><td>14 GB</td><td>6.7B</td><td>Código completo</td></tr>
+</table>
+</section>
+
+<section>
+<h2>Gerenciar Users</h2>
+<pre><code># Criar admin
+./tambaqui user criar nome senha --admin
+
+# Criar user normal
+./tambaqui user criar nome senha
+
+# Listar
+./tambaqui user listar
+
+# Trocar senha
+./tambaqui user senha nome novaSenha
+
+# No Docker:
+docker exec tambaqui python3 app.py user criar nome senha --admin</code><button class="copy" onclick="cp(this)">Copiar</button></pre>
+</section>
+
+</div>
+
+<footer>
+    <p>🐟 Tambaqui - IA brasileira de código</p>
+    <p style="margin-top:4px"><a href="https://github.com/koalitos/tambaqui">GitHub</a></p>
+</footer>
+
+<script>
+function showTab(id){
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('tab-'+id).classList.add('active');
+}
+function cp(btn){
+    const code=btn.parentElement.querySelector('code').textContent;
+    navigator.clipboard.writeText(code);
+    btn.textContent='Copiado!';
+    setTimeout(()=>btn.textContent='Copiar',2000);
+}
+</script>
+</body>
+</html>
