@@ -325,6 +325,18 @@ class ModelManager:
         _salvar_config(cfg)
         return {"ok": True, "device": device, "aviso": "Recarregue o modelo pra aplicar."}
 
+    def get_idle_timeout(self) -> int:
+        cfg = _carregar_config()
+        return cfg.get("idle_timeout_min", 0)
+
+    def set_idle_timeout(self, minutes: int) -> dict:
+        cfg = _carregar_config()
+        cfg["idle_timeout_min"] = minutes
+        _salvar_config(cfg)
+        if minutes > 0:
+            self._resetar_idle_timer()
+        return {"ok": True, "idle_timeout_min": minutes}
+
     def get_api_mode(self) -> str:
         """Retorna modo da API: 'direto' (só modelo) ou 'busca' (modelo + web search)."""
         cfg = _carregar_config()
@@ -593,16 +605,66 @@ class ModelManager:
 
     # --- Geração ---
 
+    def _limpar_cache(self):
+        """Libera cache de GPU/CPU após geração."""
+        import gc
+        gc.collect()
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+        except Exception:
+            pass
+
+    def _resetar_idle_timer(self):
+        """Reseta o timer de idle. Se ninguém usar por X min, descarrega."""
+        self._ultimo_uso = time.time()
+
+        cfg = _carregar_config()
+        idle_min = cfg.get("idle_timeout_min", 0)  # 0 = desativado
+        if idle_min <= 0:
+            return
+
+        # Cancelar timer anterior
+        if hasattr(self, "_idle_timer") and self._idle_timer:
+            self._idle_timer.cancel()
+
+        def _idle_check():
+            elapsed = time.time() - self._ultimo_uso
+            if elapsed >= idle_min * 60 and self.model is not None:
+                logger.info(f"💤 Idle {idle_min}min - descarregando modelo pra economizar energia")
+                self.descarregar()
+
+        self._idle_timer = threading.Timer(idle_min * 60, _idle_check)
+        self._idle_timer.daemon = True
+        self._idle_timer.start()
+
     def gerar(self, messages: list, max_tokens: int = 2048, temperature: float = 0.7,
               top_p: float = 0.9, stream: bool = False) -> any:
         """Gera resposta. Se stream=True, retorna generator."""
+        # Auto-recarregar se foi descarregado por idle
+        if not self.model and self.modelo_ativo:
+            logger.info("🔄 Cold start - recarregando modelo...")
+            self.carregar(self.modelo_ativo)
+
         if not self.model or not self.tokenizer:
             return None
 
+        self._resetar_idle_timer()
+
         if stream:
-            return self._gerar_stream(messages, max_tokens, temperature, top_p)
+            return self._gerar_stream_wrapper(messages, max_tokens, temperature, top_p)
         else:
-            return self._gerar_completo(messages, max_tokens, temperature, top_p)
+            resultado = self._gerar_completo(messages, max_tokens, temperature, top_p)
+            self._limpar_cache()
+            return resultado
+
+    def _gerar_stream_wrapper(self, messages, max_tokens, temperature, top_p):
+        """Wrapper do stream que limpa cache no final."""
+        for chunk in self._gerar_stream(messages, max_tokens, temperature, top_p):
+            yield chunk
+        self._limpar_cache()
 
     def _gerar_completo(self, messages: list, max_tokens: int, temperature: float, top_p: float) -> Optional[str]:
         import torch
@@ -1209,6 +1271,14 @@ async def api_descarregar():
 async def api_deletar_modelo(nome: str):
     return manager.deletar(nome)
 
+@app.get("/api/idle")
+async def api_get_idle():
+    return {"idle_timeout_min": manager.get_idle_timeout()}
+
+@app.post("/api/idle")
+async def api_set_idle(minutes: int):
+    return manager.set_idle_timeout(minutes)
+
 @app.get("/api/mode")
 async def api_get_mode():
     return {"mode": manager.get_api_mode()}
@@ -1660,6 +1730,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 
 <div class="card">
+<h2>Economia de Energia</h2>
+<p style="font-size:13px;color:var(--t2);margin-bottom:10px">Descarrega o modelo da RAM/GPU após ficar idle. Re-carrega automaticamente quando chegar request (cold start).</p>
+<div style="display:flex;gap:8px;flex-wrap:wrap" id="idleList"></div>
+</div>
+
+<div class="card">
 <h2>Modo de Resposta da API</h2>
 <p style="font-size:13px;color:var(--t2);margin-bottom:10px">Como a API <code>/v1/chat/completions</code> responde pros CLIs externos:</p>
 <div style="display:flex;gap:8px;flex-wrap:wrap" id="modoList"></div>
@@ -1743,6 +1819,29 @@ async function baixar(n){const r=await fetch('/api/modelos/baixar?nome='+n,{meth
 async function carregar(n){const r=await fetch('/api/modelos/carregar?nome='+n,{method:'POST'});const d=await r.json();toast(d.status||'Carregando...');load()}
 async function descarregar(){await fetch('/api/modelos/descarregar',{method:'POST'});toast('Descarregado');load()}
 async function deletar(n){if(!confirm('Deletar '+n+'?'))return;await fetch('/api/modelos/'+n,{method:'DELETE'});toast('Deletado');load()}
+
+// Idle timeout
+async function loadIdle(){
+    try{
+        const r=await fetch('/api/idle');const d=await r.json();const cur=d.idle_timeout_min;
+        const opts=[
+            {v:0,label:'Desativado',desc:'Modelo fica sempre na RAM'},
+            {v:5,label:'5 min',desc:'Descarrega após 5 min sem uso'},
+            {v:15,label:'15 min',desc:'Descarrega após 15 min sem uso'},
+            {v:30,label:'30 min',desc:'Descarrega após 30 min sem uso'},
+            {v:60,label:'1 hora',desc:'Descarrega após 1 hora sem uso'},
+        ];
+        document.getElementById('idleList').innerHTML=opts.map(o=>{
+            const sel=o.v===cur;
+            return`<div class="mi ${sel?'act':''}" style="cursor:pointer;flex:1;min-width:140px" onclick="setIdle(${o.v})">
+                <div class="nm">${sel?'●':'○'} ${o.label}<br><span style="font-size:11px;color:var(--t2)">${o.desc}</span></div>
+            </div>`}).join('');
+    }catch(e){}
+}
+async function setIdle(m){
+    await fetch('/api/idle?minutes='+m,{method:'POST'});
+    toast(m>0?'Idle: descarrega após '+m+' min':'Idle desativado');loadIdle();
+}
 
 // Modo de resposta da API
 async function loadModo(){
@@ -1932,7 +2031,7 @@ async function deletarUser(u){
     await fetch('/api/auth/users/'+u,{method:'DELETE'});toast('Deletado');loadUsers();
 }
 
-load();loadUsers();loadApiKey();loadDevices();loadModo();
+load();loadUsers();loadApiKey();loadDevices();loadIdle();loadModo();
 // Refresh mais rápido quando tem download ativo
 setInterval(()=>{
     const hasDownload=document.querySelector('.bar');
