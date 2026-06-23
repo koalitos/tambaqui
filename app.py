@@ -356,6 +356,16 @@ class ModelManager:
         _salvar_config(cfg)
         return {"ok": True, "device": device, "aviso": "Recarregue o modelo pra aplicar."}
 
+    def get_preload(self) -> bool:
+        cfg = _carregar_config()
+        return cfg.get("preload", False)
+
+    def set_preload(self, enabled: bool) -> dict:
+        cfg = _carregar_config()
+        cfg["preload"] = enabled
+        _salvar_config(cfg)
+        return {"ok": True, "preload": enabled}
+
     def get_idle_timeout(self) -> int:
         cfg = _carregar_config()
         return cfg.get("idle_timeout_min", 0)
@@ -1006,9 +1016,11 @@ manager = ModelManager()
 # Auto-carregar modelo no startup
 @app.on_event("startup")
 async def startup():
-    # Não carrega modelo automaticamente - espera o admin escolher manualmente
     locais = manager.listar_locais()
-    if locais:
+    if locais and manager.get_preload():
+        logger.info(f"🚀 Pre-carregar ativado. Carregando {locais[0]['nome']}...")
+        threading.Thread(target=lambda: manager.carregar(locais[0]["nome"]), daemon=True).start()
+    elif locais:
         logger.info(f"📦 {len(locais)} modelo(s) disponível(is). Carregue pelo /admin.")
 
 
@@ -1366,6 +1378,14 @@ async def api_descarregar():
 @app.delete("/api/modelos/{nome}")
 async def api_deletar_modelo(nome: str):
     return manager.deletar(nome)
+
+@app.get("/api/preload")
+async def api_get_preload():
+    return {"preload": manager.get_preload()}
+
+@app.post("/api/preload")
+async def api_set_preload(enabled: bool):
+    return manager.set_preload(enabled)
 
 @app.get("/api/idle")
 async def api_get_idle():

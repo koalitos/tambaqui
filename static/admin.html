@@ -70,7 +70,10 @@ details pre{background:var(--bg);padding:12px;margin:6px 0;border-radius:8px;fon
 </div></div>
 
 <div class="card"><h2>Economia de Energia</h2>
-<p class="desc">Descarrega o modelo após ficar idle. Re-carrega no próximo request.</p>
+<p class="desc">Controle como o modelo usa memória quando idle.</p>
+<h3 style="font-size:13px;color:var(--t2);margin:10px 0 6px">Pre-carregar na inicialização</h3>
+<div class="sel-group" id="preloadList"></div>
+<h3 style="font-size:13px;color:var(--t2);margin:14px 0 6px">Idle timeout</h3>
 <div class="sel-group" id="idleList"></div></div>
 
 <div class="card"><h2>Modo da API</h2>
@@ -191,6 +194,20 @@ async function loadDevices(){try{const r=await fetch('/api/devices');const d=awa
     document.getElementById('deviceList').innerHTML=d.devices.map(dv=>`<div class="mi sel-item ${dv.id===d.atual?'act':''}" onclick="setDevice('${dv.id}')"><div class="nm">${dv.id===d.atual?'●':'○'} ${dv.nome}<small>${dv.info}</small></div></div>`).join('')}catch(e){}}
 async function setDevice(id){await fetch('/api/devices?device='+id,{method:'POST'});document.getElementById('deviceAviso').style.display='block';toast('Device: '+id);loadDevices();load()}
 
+async function loadPreload(){
+    try{
+        const r=await fetch('/api/preload');const d=await r.json();const cur=d.preload;
+        document.getElementById('preloadList').innerHTML=[
+            {v:false,l:'Desligado',d:'Inicia leve. Carregue manualmente pelo admin.'},
+            {v:true,l:'Ligado',d:'Carrega o modelo ao iniciar o servidor.'}
+        ].map(o=>{const sel=(o.v===cur);
+            return`<div class="mi sel-item ${sel?'act':''}" onclick="setPreload(${o.v})" style="flex:1;min-width:200px">
+                <div class="nm">${sel?'●':'○'} ${o.l}<small>${o.d}</small></div></div>`}).join('')
+    }catch(e){}}
+async function setPreload(v){
+    await fetch('/api/preload?enabled='+v,{method:'POST'});
+    toast(v?'Pre-carregar ativado':'Pre-carregar desativado');loadPreload()}
+
 async function loadIdle(){try{const r=await fetch('/api/idle');const d=await r.json();const cur=d.idle_timeout_min;
     document.getElementById('idleList').innerHTML=[{v:0,l:'Sempre ligado',d:'Modelo na RAM 24/7'},{v:5,l:'5 min',d:'Idle → descarrega'},{v:15,l:'15 min',d:'Idle → descarrega'},{v:30,l:'30 min',d:'Idle → descarrega'},{v:60,l:'1 hora',d:'Idle → descarrega'}].map(o=>
         `<div class="mi sel-item ${o.v===cur?'act':''}" onclick="setIdle(${o.v})"><div class="nm">${o.v===cur?'●':'○'} ${o.l}<small>${o.d}</small></div></div>`).join('')}catch(e){}}
@@ -258,7 +275,7 @@ async function loadApiKey(){try{const r=await fetch('/api/auth/api-key');if(r.st
     `}catch(e){}}
 async function regenKey(){if(!confirm('Regenerar? A key anterior para de funcionar.'))return;await fetch('/api/auth/api-key/regenerar',{method:'POST'});toast('Key regenerada');loadApiKey()}
 
-load();loadUsers();loadApiKey();loadDevices();loadIdle();loadModo();
+load();loadUsers();loadApiKey();loadDevices();loadPreload();loadIdle();loadModo();
 setInterval(()=>{load()},2000);
 </script>
 </body></html>
