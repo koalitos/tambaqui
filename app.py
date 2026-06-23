@@ -513,19 +513,21 @@ class ModelManager:
             # Device e dtype
             modelo_gb = sum(f.stat().st_size for f in pasta.glob("*.safetensors")) / (1024**3)
 
+            # RAM disponível
+            ram_gb = 0
+            if HAS_PSUTIL:
+                ram_gb = psutil.virtual_memory().available / (1024**3)
+
             if self.device_atual == "auto":
-                # Auto-detectar
                 device = "cpu"
-                dtype = torch.float32
+                dtype = torch.float16  # float16 em CPU funciona e usa metade da RAM
                 if torch.cuda.is_available():
                     gpu_mem = torch.cuda.get_device_properties(0).total_mem / (1024**3)
                     if modelo_gb * 1.2 < gpu_mem:
                         device = "cuda"
-                        dtype = torch.float16
                 elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-                    if modelo_gb < 4:
-                        device = "mps"
-                        dtype = torch.float16
+                    # MPS: tentar sempre, deixar o torch lidar com offload
+                    device = "mps"
             elif self.device_atual.startswith("cuda"):
                 device = self.device_atual
                 dtype = torch.float16
@@ -534,10 +536,11 @@ class ModelManager:
                 dtype = torch.float16
             else:
                 device = "cpu"
-                dtype = torch.float32
+                dtype = torch.float16
 
             self.device_nome = device
-            logger.info(f"  Device: {device} | Dtype: {dtype} | Modelo: {modelo_gb:.1f}GB")
+            ram_modelo = modelo_gb * (2 if dtype == torch.float16 else 4) / modelo_gb if modelo_gb else 0
+            logger.info(f"  Device: {device} | Dtype: {dtype} | Modelo: {modelo_gb:.1f}GB | RAM livre: {ram_gb:.1f}GB")
 
             # Carregar modelo
             load_kwargs = {
@@ -545,11 +548,27 @@ class ModelManager:
                 "trust_remote_code": True,
                 "low_cpu_mem_usage": True,
             }
-            if device != "cpu":
+
+            # Para modelos grandes: usar device_map auto pra distribuir entre RAM/GPU
+            if modelo_gb > 6:
+                load_kwargs["device_map"] = "auto"
+                logger.info(f"  Modelo grande ({modelo_gb:.1f}GB) - usando device_map=auto")
+            elif device != "cpu":
                 load_kwargs["device_map"] = device
 
-            self.model = AutoModelForCausalLM.from_pretrained(str(pasta), **load_kwargs)
-            if device == "cpu":
+            try:
+                self.model = AutoModelForCausalLM.from_pretrained(str(pasta), **load_kwargs)
+            except Exception as e1:
+                # Fallback: se falhar (MPS buffer, OOM), tentar CPU float16
+                logger.warning(f"  Falha no {device}: {e1}")
+                logger.info(f"  Tentando fallback: CPU float16...")
+                device = "cpu"
+                dtype = torch.float16
+                self.device_nome = device
+                load_kwargs = {"torch_dtype": dtype, "trust_remote_code": True, "low_cpu_mem_usage": True}
+                self.model = AutoModelForCausalLM.from_pretrained(str(pasta), **load_kwargs)
+
+            if not hasattr(self.model, "hf_device_map"):
                 self.model = self.model.to(device)
             self.model.eval()
 
