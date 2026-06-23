@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
-<CommunityApplications>
+<ProfileList>
   <Profile>
     <Name>koalitos</Name>
+    <Github>https://github.com/koalitos</Github>
     <Discord></Discord>
     <Support>https://github.com/koalitos/tambaqui/issues</Support>
-    <ProfileURL>https://github.com/koalitos</ProfileURL>
   </Profile>
-</CommunityApplications>
+</ProfileList>
