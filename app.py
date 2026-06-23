@@ -157,6 +157,29 @@ SYSTEM_PROMPT = (
     "Tambaqui: 'Manda a mensagem de erro completa e o trecho do código pra eu ver o que está acontecendo.'\n"
 )
 
+# Prompt curto pra modelos pequenos (<7B) - máximo ~150 tokens
+SYSTEM_PROMPT_SHORT = (
+    "Você é Tambaqui, assistente de programação brasileiro. "
+    "Responda em português. Código em blocos ```linguagem.\n"
+    "REGRAS:\n"
+    "- Cumprimentos (oi, boa tarde): responda normalmente, SEM código.\n"
+    "- Só gere código se pedirem (crie, faça, gere, implemente).\n"
+    "- Código completo e funcional com imports.\n"
+    "- Se não sabe, diga que não sabe.\n"
+    "- Não invente funções ou libs que não existem."
+)
+
+
+def _get_system_prompt() -> str:
+    """Retorna prompt adequado ao modelo carregado."""
+    if not manager.modelo_ativo:
+        return SYSTEM_PROMPT_SHORT
+    nome = manager.modelo_ativo.lower()
+    # Modelos 7B+ usam prompt completo, menores usam curto
+    if any(x in nome for x in ["7b", "14b", "70b", "13b", "34b", "8b"]):
+        return SYSTEM_PROMPT
+    return SYSTEM_PROMPT_SHORT
+
 HTTP_HEADERS = {"User-Agent": "Tambaqui/2.0"}
 
 # Catálogo de modelos recomendados
@@ -903,18 +926,68 @@ class ModelManager:
         inputs = {k: v.to(dev) for k, v in inputs.items()}
         return inputs, inputs["input_ids"].shape[1]
 
+    def _ajustar_temperatura(self, temperature: float) -> float:
+        """Modelos pequenos precisam de temperatura mais baixa pra não alucinar."""
+        if not self.modelo_ativo:
+            return temperature
+        nome = self.modelo_ativo.lower()
+        if any(x in nome for x in ["0.5b", "1.5b", "1b", "3b"]):
+            return min(temperature, 0.3)  # Máx 0.3 pra modelos pequenos
+        return temperature
+
+    def _validar_resposta(self, resposta: str, messages: list) -> str:
+        """Filtra respostas com alucinação óbvia."""
+        if not resposta:
+            return resposta
+
+        # Pegar última mensagem do user
+        last_user = ""
+        for m in reversed(messages):
+            if m.get("role") == "user":
+                last_user = m.get("content", "")
+                break
+
+        # Se era casual e modelo gerou código, remover o código
+        if _is_casual(last_user):
+            # Remover blocos de código
+            limpo = re.sub(r"```[\s\S]*?```", "", resposta).strip()
+            if limpo:
+                return limpo
+            return "Boa tarde! Como posso ajudar com código hoje?"
+
+        # Filtrar repetição excessiva (modelo em loop)
+        linhas = resposta.split("\n")
+        if len(linhas) > 5:
+            unicas = set(linhas)
+            if len(unicas) < len(linhas) * 0.3:
+                # Mais de 70% repetido - pegar só as únicas
+                vistas = set()
+                resultado = []
+                for l in linhas:
+                    if l not in vistas or l.strip() == "":
+                        resultado.append(l)
+                        vistas.add(l)
+                resposta = "\n".join(resultado)
+
+        return resposta
+
     def _gerar_completo(self, messages: list, max_tokens: int, temperature: float, top_p: float) -> Optional[str]:
         import torch
+
+        temperature = self._ajustar_temperatura(temperature)
 
         try:
             inputs, input_len = self._prepare_inputs(messages)
             gen_kwargs = self._get_gen_kwargs(max_tokens, temperature, top_p)
 
-            with torch.inference_mode():  # mais rápido que no_grad
+            with torch.inference_mode():
                 outputs = self.model.generate(**inputs, **gen_kwargs)
 
             resposta = self.tokenizer.decode(outputs[0][input_len:], skip_special_tokens=True)
-            return resposta.strip() or None
+            resposta = resposta.strip()
+            if resposta:
+                resposta = self._validar_resposta(resposta, messages)
+            return resposta or None
 
         except Exception as e:
             logger.error(f"Erro na geração: {e}")
@@ -1534,7 +1607,7 @@ async def tambaqui_chat(req: TambaquiChatRequest):
         yield f"data: {json.dumps({'type': 'meta', 'fontes': fontes, 'session_id': sessao.session_id})}\n\n"
 
         # 2. Montar messages
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        messages = [{"role": "system", "content": _get_system_prompt()}]
         messages.extend(sessao.get_messages(max_msgs=10))
 
         if contexto and messages:
@@ -1737,7 +1810,7 @@ def cli_chat():
 
         # Gerar
         sessao.adicionar("user", msg)
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        messages = [{"role": "system", "content": _get_system_prompt()}]
         messages.extend(sessao.get_messages(max_msgs=10))
 
         print()
