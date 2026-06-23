@@ -157,28 +157,9 @@ SYSTEM_PROMPT = (
     "Tambaqui: 'Manda a mensagem de erro completa e o trecho do código pra eu ver o que está acontecendo.'\n"
 )
 
-# Prompt curto pra modelos pequenos (<7B) - máximo ~150 tokens
-SYSTEM_PROMPT_SHORT = (
-    "Você é Tambaqui, assistente de programação brasileiro. "
-    "Responda em português. Código em blocos ```linguagem.\n"
-    "REGRAS:\n"
-    "- Cumprimentos (oi, boa tarde): responda normalmente, SEM código.\n"
-    "- Só gere código se pedirem (crie, faça, gere, implemente).\n"
-    "- Código completo e funcional com imports.\n"
-    "- Se não sabe, diga que não sabe.\n"
-    "- Não invente funções ou libs que não existem."
-)
-
-
 def _get_system_prompt() -> str:
-    """Retorna prompt adequado ao modelo carregado."""
-    if not manager.modelo_ativo:
-        return SYSTEM_PROMPT_SHORT
-    nome = manager.modelo_ativo.lower()
-    # Modelos 7B+ usam prompt completo, menores usam curto
-    if any(x in nome for x in ["7b", "14b", "70b", "13b", "34b", "8b"]):
-        return SYSTEM_PROMPT
-    return SYSTEM_PROMPT_SHORT
+    """Retorna system prompt."""
+    return SYSTEM_PROMPT
 
 HTTP_HEADERS = {"User-Agent": "Tambaqui/2.0"}
 
@@ -1373,6 +1354,23 @@ class CompletionRequest(BaseModel):
         extra = "allow"
 
 
+# ============================================================
+# API LOGS
+# ============================================================
+
+API_LOGS: list = []  # ring buffer de logs
+API_LOGS_MAX = 200
+
+
+def _log_api(tipo: str, data: dict):
+    """Registra evento na API."""
+    entry = {"timestamp": datetime.now().isoformat(), "tipo": tipo, **data}
+    API_LOGS.append(entry)
+    if len(API_LOGS) > API_LOGS_MAX:
+        API_LOGS.pop(0)
+    logger.info(f"[API] {tipo}: {json.dumps({k: str(v)[:100] for k, v in data.items()}, ensure_ascii=False)}")
+
+
 def _contar_tokens(text: str) -> int:
     """Estimativa simples de tokens (~4 chars por token)."""
     return len(text) // 4
@@ -1484,9 +1482,26 @@ async def chat_completions(req: ChatRequest, request: Request):
     messages = [{"role": m.role, "content": m.content} for m in req.messages]
     max_tokens = req.max_tokens or 2048
 
+    # Pegar última msg do user pra log
+    last_user_msg = ""
+    for m in reversed(messages):
+        if m.get("role") == "user":
+            last_user_msg = m.get("content", "")[:200]
+            break
+
+    user = _get_user_from_request(request)
+    username = user["username"] if user else "anon"
+
     # Detectar CLI e reforçar instruções pro modelo
     cli = _detectar_cli(messages)
+    is_casual_msg = _is_casual(last_user_msg)
     messages = _reforcar_system_prompt(messages, cli)
+
+    _log_api("request", {
+        "user": username, "cli": cli or "web", "modelo": manager.modelo_ativo,
+        "mensagem": last_user_msg, "casual": is_casual_msg,
+        "msgs": len(messages), "stream": req.stream, "temp": req.temperature,
+    })
 
     # Se modo "busca", injetar contexto web na última mensagem do user
     if manager.get_api_mode() == "busca" and messages:
@@ -1500,6 +1515,8 @@ async def chat_completions(req: ChatRequest, request: Request):
             if pesquisa["contexto"]:
                 messages[last_user]["content"] = f"Contexto da pesquisa:\n{pesquisa['contexto'][:2500]}\n\n---\n{messages[last_user]['content']}"
 
+    t0 = time.time()
+
     if req.stream:
         return StreamingResponse(_stream_response(messages, req), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
@@ -1510,8 +1527,15 @@ async def chat_completions(req: ChatRequest, request: Request):
     if not resposta:
         resposta = ""
 
+    elapsed = round(time.time() - t0, 1)
     prompt_tokens = _contar_tokens(prompt_text)
     completion_tokens = _contar_tokens(resposta)
+
+    _log_api("response", {
+        "user": username, "tempo": f"{elapsed}s",
+        "prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens,
+        "resposta": resposta[:200],
+    })
 
     return {
         "id": f"chatcmpl-{uuid.uuid4().hex[:8]}",
@@ -1669,6 +1693,10 @@ async def api_descarregar():
 @app.delete("/api/modelos/{nome}")
 async def api_deletar_modelo(nome: str):
     return manager.deletar(nome)
+
+@app.get("/api/logs")
+async def api_logs(limit: int = 50):
+    return {"logs": API_LOGS[-limit:]}
 
 @app.get("/api/load-mode")
 async def api_get_load_mode():

@@ -138,6 +138,10 @@ details pre{background:var(--bg);padding:.75rem;margin:.375rem 0;border-radius:c
 
 <div class="card"><div class="card-title"><i data-lucide="plug" style="width:16px;height:16px"></i> Como Conectar</div><div id="connectInfo">Carregando...</div></div>
 
+<div class="card"><div class="card-title"><i data-lucide="scroll-text" style="width:16px;height:16px"></i> API Logs</div>
+<p class="card-desc">Ultimas chamadas a API em tempo real.</p>
+<div style="max-height:400px;overflow-y:auto;font-family:ui-monospace,monospace;font-size:.6875rem;line-height:1.6" id="apiLogs">Carregando...</div></div>
+
 </div>
 <div class="toast" id="toast"></div>
 <script>
@@ -262,7 +266,18 @@ async function loadApiKey(){try{const r=await fetch('/api/auth/api-key');if(r.st
     lucide.createIcons()}catch(e){}}
 async function regenKey(){if(!confirm('Regenerar? A key anterior para de funcionar.'))return;await fetch('/api/auth/api-key/regenerar',{method:'POST'});toast('Key regenerada');loadApiKey()}
 
-load();loadUsers();loadApiKey();loadDevices();loadLoadMode();loadIdle();loadModo();
-setInterval(load,2000);
+async function loadLogs(){
+    try{const r=await fetch('/api/logs?limit=50');const d=await r.json();
+    const el=document.getElementById('apiLogs');
+    if(!d.logs||!d.logs.length){el.innerHTML='<span style="color:var(--muted-fg)">Nenhum log ainda</span>';return}
+    el.innerHTML=d.logs.reverse().map(l=>{
+        const t=l.timestamp?l.timestamp.split('T')[1]?.split('.')[0]||'':'';
+        const cor=l.tipo==='request'?'var(--blue)':l.tipo==='response'?'var(--green)':'var(--muted-fg)';
+        const parts=Object.entries(l).filter(([k])=>k!=='timestamp'&&k!=='tipo').map(([k,v])=>`<span style="color:var(--muted-fg)">${k}=</span>${String(v).substring(0,80)}`).join(' ');
+        return`<div style="padding:2px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted-fg)">${t}</span> <span style="color:${cor};font-weight:600">${l.tipo}</span> ${parts}</div>`
+    }).join('')}catch(e){}}
+
+load();loadUsers();loadApiKey();loadDevices();loadLoadMode();loadIdle();loadModo();loadLogs();
+setInterval(()=>{load();loadLogs()},2000);
 </script>
 </body></html>
