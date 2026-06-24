@@ -19,6 +19,8 @@ COPY requirements.txt .
 # pra o pip não puxar a build CPU-only do torch.
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cu121
 RUN pip install --no-cache-dir -r requirements.txt
+# Quantização 4-bit em GPU: faz modelos (3B/7B) caberem na VRAM e rodarem rápido (ex: GTX 1660 6GB)
+RUN pip install --no-cache-dir bitsandbytes
 
 COPY app.py .
 COPY static/ static/

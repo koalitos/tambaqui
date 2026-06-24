@@ -906,26 +906,41 @@ class ModelManager:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
 
             # Device e dtype
-            modelo_gb = sum(f.stat().st_size for f in pasta.glob("*.safetensors")) / (1024**3)
+            # Tamanho dos pesos: safetensors OU bin/pt (modelos só-.bin davam 0 e furavam o fit check)
+            _pesos = list(pasta.glob("*.safetensors")) or list(pasta.glob("*.bin")) or list(pasta.glob("*.pt"))
+            modelo_gb = sum(f.stat().st_size for f in _pesos) / (1024**3)
 
             # RAM disponível
             ram_gb = 0
             if HAS_PSUTIL:
                 ram_gb = psutil.virtual_memory().available / (1024**3)
 
+            # bitsandbytes: quantização 4-bit em GPU NVIDIA (faz o modelo caber na VRAM e roda rápido)
+            try:
+                import bitsandbytes  # noqa: F401
+                HAS_BNB = True
+            except Exception:
+                HAS_BNB = False
+            no_quant = os.environ.get("TAMBAQUI_NO_QUANT", "") in ("1", "true", "yes")
+            usar_4bit = False
+
             if self.device_atual == "auto":
                 device = "cpu"
-                dtype = torch.float16  # float16 em CPU funciona e usa metade da RAM
+                dtype = torch.float16
                 if torch.cuda.is_available():
                     gpu_mem = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-                    if modelo_gb * 1.2 < gpu_mem:
+                    # 4-bit ocupa ~modelo_gb/4; +1.5GB de folga pro KV cache. Cabe em GPU de 6GB.
+                    if HAS_BNB and not no_quant and (modelo_gb * 0.30 + 1.5) < gpu_mem:
+                        device = "cuda"; usar_4bit = True
+                    elif modelo_gb * 1.2 < gpu_mem:
                         device = "cuda"
+                    # senão: fica CPU. Melhor que o split GPU/CPU (device_map=auto) que trava a VRAM.
                 elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-                    # MPS: tentar sempre, deixar o torch lidar com offload
                     device = "mps"
             elif self.device_atual.startswith("cuda"):
                 device = self.device_atual
                 dtype = torch.float16
+                usar_4bit = HAS_BNB and not no_quant
             elif self.device_atual == "mps":
                 device = "mps"
                 dtype = torch.float16
@@ -933,30 +948,41 @@ class ModelManager:
                 device = "cpu"
                 dtype = torch.float16
 
-            self.device_nome = device
-            ram_modelo = modelo_gb * (2 if dtype == torch.float16 else 4) / modelo_gb if modelo_gb else 0
-            logger.info(f"  Device: {device} | Dtype: {dtype} | Modelo: {modelo_gb:.1f}GB | RAM livre: {ram_gb:.1f}GB")
+            self.device_nome = device + (" (4-bit)" if usar_4bit else "")
+            logger.info(f"  Device: {self.device_nome} | Modelo: {modelo_gb:.1f}GB | RAM livre: {ram_gb:.1f}GB")
 
             # Carregar modelo
-            load_kwargs = {
-                "dtype": dtype,
-                "trust_remote_code": trc,
-                "low_cpu_mem_usage": True,
-            }
+            load_kwargs = {"trust_remote_code": trc, "low_cpu_mem_usage": True}
 
-            # Para modelos grandes: usar device_map auto pra distribuir entre RAM/GPU
-            if modelo_gb > 6:
-                load_kwargs["device_map"] = "auto"
-                logger.info(f"  Modelo grande ({modelo_gb:.1f}GB) - usando device_map=auto")
-            elif device != "cpu":
-                load_kwargs["device_map"] = device
+            if usar_4bit:
+                from transformers import BitsAndBytesConfig
+                load_kwargs["quantization_config"] = BitsAndBytesConfig(
+                    load_in_4bit=True, bnb_4bit_quant_type="nf4",
+                    bnb_4bit_compute_dtype=torch.float16, bnb_4bit_use_double_quant=True)
+                load_kwargs["device_map"] = {"": 0}  # modelo inteiro na GPU 0
+                logger.info("  ⚡ Quantização 4-bit (nf4) ativada — cabe na VRAM e sobra pro KV cache")
+            else:
+                load_kwargs["dtype"] = dtype
+                if modelo_gb > 6:
+                    load_kwargs["device_map"] = "auto"
+                    logger.info(f"  Modelo grande ({modelo_gb:.1f}GB) - usando device_map=auto")
+                elif device != "cpu":
+                    load_kwargs["device_map"] = device
 
             try:
                 self.model = AutoModelForCausalLM.from_pretrained(str(pasta), **load_kwargs)
             except Exception as e1:
                 # Fallback: se falhar (MPS buffer, OOM), tentar CPU float16
                 logger.warning(f"  Falha no {device}: {e1}")
-                logger.info(f"  Tentando fallback: CPU float16...")
+                logger.info("  Tentando fallback: CPU...")
+                # Liberar a VRAM parcial antes de tentar CPU (caso tenha sido OOM)
+                try:
+                    import gc
+                    gc.collect()
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                except Exception:
+                    pass
                 device = "cpu"
                 dtype = torch.float16
                 self.device_nome = device
@@ -981,7 +1007,8 @@ class ModelManager:
             # Em CPU/MPS o ganho é nulo/negativo e a compilação custa caro (recompila por shape);
             # desativado de propósito. O caminho de perf em CPU é quantização/GGUF (ver Onda 4).
             try:
-                if hasattr(torch, "compile") and device.startswith("cuda"):
+                # Não compilar modelo 4-bit (bnb): torch.compile reduce-overhead quebra/trava com quantização.
+                if hasattr(torch, "compile") and device.startswith("cuda") and not usar_4bit:
                     self.model = torch.compile(self.model, mode="reduce-overhead")
                     logger.info("  ⚡ torch.compile ativado (reduce-overhead)")
             except Exception as e:
