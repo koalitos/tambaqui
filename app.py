@@ -1003,12 +1003,12 @@ class ModelManager:
             except Exception:
                 pass
 
-            # 2. torch.compile — só em CUDA (reduce-overhead usa CUDA graphs).
-            # Em CPU/MPS o ganho é nulo/negativo e a compilação custa caro (recompila por shape);
-            # desativado de propósito. O caminho de perf em CPU é quantização/GGUF (ver Onda 4).
+            # 2. torch.compile — OPT-IN (TAMBAQUI_COMPILE=1). reduce-overhead usa CUDA graphs que, com
+            # shapes variáveis de geração e em GPUs Turing (ex: GTX 1660), podem TRAVAR a 1ª request real
+            # (o warmup passa porque usa shapes fixos). Default OFF: ganho marginal, risco de hang alto.
             try:
-                # Não compilar modelo 4-bit (bnb): torch.compile reduce-overhead quebra/trava com quantização.
-                if hasattr(torch, "compile") and device.startswith("cuda") and not usar_4bit:
+                if (os.environ.get("TAMBAQUI_COMPILE", "") in ("1", "true", "yes")
+                        and hasattr(torch, "compile") and device.startswith("cuda") and not usar_4bit):
                     self.model = torch.compile(self.model, mode="reduce-overhead")
                     logger.info("  ⚡ torch.compile ativado (reduce-overhead)")
             except Exception as e:
@@ -1366,24 +1366,44 @@ class ModelManager:
         from transformers import TextIteratorStreamer
 
         temperature = self._ajustar_temperatura(temperature)
+        gen_timeout = int(os.environ.get("TAMBAQUI_GEN_TIMEOUT", "180"))
 
         try:
             inputs, _ = self._prepare_inputs(messages)
-            streamer = TextIteratorStreamer(self.tokenizer, skip_prompt=True, skip_special_tokens=True)
+            # timeout: se generate() travar/morrer, o iterator NÃO fica preso pra sempre — senão o
+            # _lock fica segurado e TODAS as próximas requests penduram (bug do TextIteratorStreamer).
+            streamer = TextIteratorStreamer(self.tokenizer, skip_prompt=True, skip_special_tokens=True, timeout=gen_timeout)
             gen_kwargs = {**inputs, **self._get_gen_kwargs(max_tokens, temperature, top_p, stop), "streamer": streamer}
 
+            erro = {}
+
             def _gen():
-                with torch.inference_mode():
-                    self.model.generate(**gen_kwargs)
+                try:
+                    with torch.inference_mode():
+                        self.model.generate(**gen_kwargs)
+                except Exception as e:
+                    erro["e"] = e
+                    logger.error(f"Erro na geração (thread): {e}")
+                    try:
+                        streamer.end()  # destrava o iterator quando generate() falha
+                    except Exception:
+                        pass
 
             thread = threading.Thread(target=_gen)
             thread.start()
 
-            for chunk in streamer:
-                if chunk:
-                    yield chunk
+            try:
+                for chunk in streamer:
+                    if chunk:
+                        yield chunk
+            except Exception as e:
+                # timeout do streamer (geração travou) — reporta em vez de pendurar
+                logger.error(f"Streamer interrompido: {e}")
+                yield f"\n[Geração interrompida (timeout {gen_timeout}s)]"
 
-            thread.join()
+            thread.join(timeout=5)
+            if erro:
+                yield f"\n[Erro: {erro['e']}]"
 
         except Exception as e:
             logger.error(f"Erro no streaming: {e}")
