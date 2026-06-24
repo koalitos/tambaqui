@@ -190,6 +190,7 @@ details pre{background:var(--bg);padding:.75rem;margin:.25rem 0;border-radius:.4
 
   <!-- MODELS -->
   <section class="panel" id="models">
+    <div class="card" id="dlCard" style="display:none"><div class="card-title"><i class="ic" data-lucide="arrow-down-circle" style="width:16px;height:16px"></i> Downloads em andamento</div><div class="item-list" id="dlList"></div></div>
     <div class="card"><div class="card-title"><i class="ic" data-lucide="hard-drive-download" style="width:16px;height:16px"></i> Modelos Baixados</div><div class="grid" id="locais"></div></div>
 
     <div class="card"><div class="card-title"><i class="ic" data-lucide="search" style="width:16px;height:16px"></i> Buscar no HuggingFace</div>
@@ -294,6 +295,19 @@ async function load(){
     gs.innerHTML=d.gpus.map(g=>g.tipo==='cuda'?
       `<div class="stat"><div class="stat-value" style="color:${bc(g.vram_percent)}">${g.vram_percent}%</div><div class="stat-label">${esc(g.nome)}</div></div><div class="stat"><div class="stat-value">${g.vram_usada_gb}/${g.vram_total_gb}G</div><div class="stat-label">VRAM</div></div>`:
       `<div class="stat"><div class="stat-value" style="color:var(--blue)">${g.vram_usada_gb}G</div><div class="stat-label">${esc(g.nome)}</div></div>`).join('')}else{gc.style.display='none'}
+
+  // Painel global de downloads (catálogo, busca HF, GGUF, repo colado) — % / status / erro.
+  const dls=d.downloads?Object.entries(d.downloads):[];const dlCard=document.getElementById('dlCard');
+  if(dls.length){dlCard.style.display='block';
+    document.getElementById('dlList').innerHTML=dls.map(([nome,info])=>{const pct=info.percent||0;
+      const err=pct<0||(info.status||'').startsWith('erro');
+      const meta=[info.status,info.arquivo,info.velocidade].filter(Boolean).map(esc).join(' · ');
+      return`<div class="item" style="flex-wrap:wrap">
+        <div class="item-name">${esc(nome)}<small>${meta}</small></div>
+        <span style="font-size:.75rem;font-weight:700;color:${err?'var(--red)':'var(--yellow)'}">${err?'erro':pct+'%'}</span>
+        ${err?'':`<div style="width:100%"><div class="progress"><div class="progress-bar" style="width:${Math.max(pct,2)}%"></div></div></div>`}
+      </div>`}).join('')}
+  else{dlCard.style.display='none'}
 
   const d2=await (await fetch('/api/modelos')).json();
   document.getElementById('locais').innerHTML=!d2.locais.length?'<p class="empty">Nenhum modelo baixado — busque um na aba acima.</p>':
