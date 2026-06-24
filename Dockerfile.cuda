@@ -1,0 +1,47 @@
+# Imagem com suporte a GPU NVIDIA (CUDA 12.1 + cuDNN8).
+#   Build: docker build -f Dockerfile.cuda -t tambaqui:cuda .
+#   Run:   docker run --gpus all -p 8000:8000 tambaqui:cuda
+# Requer nvidia-container-toolkit no host.
+FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip build-essential curl && \
+    rm -rf /var/lib/apt/lists/* && \
+    ln -sf /usr/bin/python3 /usr/bin/python && \
+    ln -sf /usr/bin/pip3 /usr/bin/pip
+
+WORKDIR /app
+
+COPY requirements.txt .
+# PyTorch com CUDA 12.1 (GTX 1660, RTX, etc.) instalado ANTES do requirements,
+# pra o pip não puxar a build CPU-only do torch.
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cu121
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app.py .
+COPY static/ static/
+
+RUN mkdir -p modelos dados/sessoes && chmod -R 777 modelos dados
+
+ENV TAMBAQUI_ADMIN_USER=admin
+ENV TAMBAQUI_ADMIN_PASS=tambaqui
+# Expõe a GPU dentro do container
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD curl -f http://localhost:8000/api/status || exit 1
+
+# Entrypoint: cria admin se não existe + inicia server
+CMD python3 -c "\
+from app import user_criar, _carregar_users; \
+import os; \
+users = _carregar_users(); \
+u = os.environ.get('TAMBAQUI_ADMIN_USER', 'admin'); \
+p = os.environ.get('TAMBAQUI_ADMIN_PASS', 'tambaqui'); \
+user_criar(u, p, True) if u not in users else None; \
+" && python3 app.py

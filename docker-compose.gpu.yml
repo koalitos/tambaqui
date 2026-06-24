@@ -1,0 +1,31 @@
+# GPU NVIDIA:  docker compose -f docker-compose.gpu.yml up -d
+# Requer nvidia-container-toolkit instalado no host.
+version: "3.8"
+
+services:
+  tambaqui:
+    build:
+      context: .
+      dockerfile: Dockerfile.cuda
+    image: ghcr.io/koalitos/tambaqui:cuda
+    container_name: tambaqui
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./modelos:/app/modelos
+      - ./dados:/app/dados
+    restart: unless-stopped
+    # Equivalente a `--gpus all`
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TAMBAQUI_ADMIN_USER=admin
+      - TAMBAQUI_ADMIN_PASS=tambaqui
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility

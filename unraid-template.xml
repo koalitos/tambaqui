@@ -10,6 +10,8 @@
   <Network>bridge</Network>
   <Shell>bash</Shell>
   <Privileged>false</Privileged>
+  <!-- GPU NVIDIA: requer nvidia-driver plugin + tag :cuda da imagem -->
+  <ExtraParams>--gpus all</ExtraParams>
   <Support>https://github.com/koalitos/tambaqui/issues</Support>
   <Project>https://github.com/koalitos/tambaqui</Project>
   <Overview>
@@ -31,4 +33,6 @@
   <Config Name="Dados" Target="/app/dados" Default="/mnt/user/appdata/tambaqui/dados" Mode="rw" Description="Dados: users, sessões, conversas" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/tambaqui/dados</Config>
   <Config Name="Admin User" Target="TAMBAQUI_ADMIN_USER" Default="admin" Mode="" Description="Usuário admin padrão" Type="Variable" Display="always" Required="true" Mask="false">admin</Config>
   <Config Name="Admin Password" Target="TAMBAQUI_ADMIN_PASS" Default="tambaqui" Mode="" Description="Senha do admin (troque!)" Type="Variable" Display="always" Required="true" Mask="true">tambaqui</Config>
+  <Config Name="NVIDIA Visible Devices" Target="NVIDIA_VISIBLE_DEVICES" Default="all" Mode="" Description="GPU NVIDIA visível (use a imagem :cuda)" Type="Variable" Display="advanced" Required="false" Mask="false">all</Config>
+  <Config Name="NVIDIA Capabilities" Target="NVIDIA_DRIVER_CAPABILITIES" Default="compute,utility" Mode="" Description="Capacidades do driver NVIDIA" Type="Variable" Display="advanced" Required="false" Mask="false">compute,utility</Config>
 </Container>
