@@ -1290,11 +1290,14 @@ class ModelManager:
             kwargs["tokenizer"] = self.tokenizer
         # Cancelamento: para a geração quando o cliente desconecta ou pede stop (libera RAM/compute).
         if cancel is not None:
+            import torch
             from transformers import StoppingCriteria, StoppingCriteriaList
 
             class _CancelCriteria(StoppingCriteria):
                 def __call__(self, input_ids, scores, **kw):
-                    return cancel.is_set()
+                    # transformers recentes esperam um BoolTensor por item do batch (não um bool puro).
+                    return torch.full((input_ids.shape[0],), cancel.is_set(),
+                                      dtype=torch.bool, device=input_ids.device)
 
             kwargs["stopping_criteria"] = StoppingCriteriaList([_CancelCriteria()])
         return kwargs
@@ -1411,6 +1414,10 @@ class ModelManager:
 
             try:
                 for chunk in streamer:
+                    # Cancelado: corta o stream na hora (feedback imediato); o StoppingCriteria
+                    # para a thread de geração logo em seguida.
+                    if cancel is not None and cancel.is_set():
+                        break
                     if chunk:
                         yield chunk
             except Exception as e:
