@@ -1883,6 +1883,64 @@ def _log_api(tipo: str, data: dict):
     logger.info(f"[API] {tipo}: {json.dumps({k: str(v)[:100] for k, v in data.items()}, ensure_ascii=False)}")
 
 
+class Atividade:
+    """Rastreia gerações ao vivo: o que está fazendo, % processado (tokens/max), tempo, erro."""
+
+    def __init__(self, maxn: int = 25):
+        self.atual = {}      # id -> registro em andamento
+        self.recentes = []   # últimas N concluídas/erradas
+        self.maxn = maxn
+        self._lock = threading.Lock()
+
+    def iniciar(self, id, **kw):
+        with self._lock:
+            self.atual[id] = {"id": id, "estado": "iniciando", "tokens": 0, "percent": 0,
+                              "inicio": time.time(), "elapsed": 0.0, **kw}
+
+    def set(self, id, **kw):
+        with self._lock:
+            a = self.atual.get(id)
+            if a:
+                a.update(kw)
+                a["elapsed"] = round(time.time() - a["inicio"], 1)
+
+    def tick(self, id, max_tokens: int):
+        with self._lock:
+            a = self.atual.get(id)
+            if a:
+                a["tokens"] += 1
+                a["estado"] = "gerando"
+                a["percent"] = min(99, int(a["tokens"] / max(max_tokens, 1) * 100))
+                a["elapsed"] = round(time.time() - a["inicio"], 1)
+
+    def erro(self, id, msg):
+        with self._lock:
+            a = self.atual.get(id)
+            if a:
+                a["estado"] = "erro"
+                a["erro"] = str(msg)[:300]
+
+    def concluir(self, id):
+        with self._lock:
+            a = self.atual.pop(id, None)
+            if not a:
+                return
+            if a.get("estado") != "erro":
+                a["estado"] = "concluido"
+                a["percent"] = 100
+            a["elapsed"] = round(time.time() - a["inicio"], 1)
+            a["fim"] = datetime.now().isoformat()
+            self.recentes.insert(0, a)
+            self.recentes = self.recentes[:self.maxn]
+
+    def snapshot(self):
+        with self._lock:
+            return {"atual": list(self.atual.values()), "recentes": list(self.recentes)}
+
+
+_atividade = Atividade()
+
+
 def _contar_tokens(text: str) -> int:
     """Estimativa simples de tokens (~4 chars por token)."""
     return len(text) // 4
@@ -2049,13 +2107,21 @@ async def chat_completions(req: ChatRequest, request: Request):
     if not _bp.try_enter():
         return _resp_429()
     prompt_text = " ".join(m["content"] for m in messages)
+    _aid = f"chatcmpl-{uuid.uuid4().hex[:8]}"
+    _atividade.iniciar(_aid, modelo=manager.modelo_ativo or "", max_tokens=max_tokens,
+                       fonte="API", mensagem=last_user_msg[:80], estado="gerando")
     try:
         # run_in_threadpool: generate() é bloqueante; sem isso travaria o event loop inteiro
         # (health, /admin, outros usuários congelavam durante cada geração).
         resposta = await run_in_threadpool(
             manager.gerar, messages, max_tokens, req.temperature, req.top_p, False, req.stop
         ) or ""
+        _atividade.set(_aid, tokens=manager.contar_tokens(resposta), percent=100)
+    except Exception as _e:
+        _atividade.erro(_aid, _e)
+        raise
     finally:
+        _atividade.concluir(_aid)
         _bp.leave()
 
     elapsed = round(time.time() - t0, 1)
@@ -2153,12 +2219,18 @@ def _stream_response(messages: list, req: ChatRequest, max_tokens: int = 1024):
     chat_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
     model = manager.modelo_ativo or req.model or ""
     created = int(time.time())
+    _msg = next((m.get("content", "")[:80] for m in reversed(messages) if m.get("role") == "user"), "")
+    _atividade.iniciar(chat_id, modelo=model, max_tokens=max_tokens, fonte="API", mensagem=_msg, estado="gerando")
 
     try:
         # Primeiro chunk: role
         yield f"data: {json.dumps({'id': chat_id, 'object': 'chat.completion.chunk', 'created': created, 'model': model, 'choices': [{'index': 0, 'delta': {'role': 'assistant'}, 'finish_reason': None}]})}\n\n"
 
         for chunk in manager.gerar(messages, max_tokens, req.temperature, req.top_p, stream=True, stop=req.stop):
+            if isinstance(chunk, str) and (chunk.startswith("[Erro") or chunk.startswith("[Geração interrompida")):
+                _atividade.erro(chat_id, chunk)
+            else:
+                _atividade.tick(chat_id, max_tokens)
             data = {
                 "id": chat_id, "object": "chat.completion.chunk",
                 "created": created, "model": model,
@@ -2170,6 +2242,7 @@ def _stream_response(messages: list, req: ChatRequest, max_tokens: int = 1024):
         yield f"data: {json.dumps({'id': chat_id, 'object': 'chat.completion.chunk', 'created': created, 'model': model, 'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}]})}\n\n"
         yield "data: [DONE]\n\n"
     finally:
+        _atividade.concluir(chat_id)
         _bp.leave()
 
 
@@ -2189,6 +2262,9 @@ async def tambaqui_chat(req: TambaquiChatRequest):
         return _resp_429()
     sessao = Sessao(req.session_id, req.user)
     sessao.adicionar("user", req.mensagem)
+    _aid = "chat-" + sessao.session_id
+    _atividade.iniciar(_aid, modelo=manager.modelo_ativo or "", max_tokens=1024, fonte="Chat web",
+                       mensagem=req.mensagem[:80], estado="buscando_web" if req.buscar_web else "gerando")
 
     def _stream():
         try:
@@ -2199,6 +2275,7 @@ async def tambaqui_chat(req: TambaquiChatRequest):
                 pesquisa = buscar_web(req.mensagem)
                 contexto = pesquisa["contexto"]
                 fontes = pesquisa["fontes"]
+            _atividade.set(_aid, estado="gerando")
 
             # Enviar fontes + session_id primeiro
             yield f"data: {json.dumps({'type': 'meta', 'fontes': fontes, 'session_id': sessao.session_id})}\n\n"
@@ -2217,9 +2294,14 @@ async def tambaqui_chat(req: TambaquiChatRequest):
             if manager.pronto():
                 try:
                     for chunk in manager.gerar(messages, max_tokens=1024, stream=True):
+                        if isinstance(chunk, str) and (chunk.startswith("[Erro") or chunk.startswith("[Geração interrompida")):
+                            _atividade.erro(_aid, chunk)
+                        else:
+                            _atividade.tick(_aid, 1024)
                         full_response += chunk
                         yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
                 except Exception as e:
+                    _atividade.erro(_aid, e)
                     logger.error(f"Stream erro: {e}")
 
             # 4. Fallback se modelo não respondeu
@@ -2234,6 +2316,7 @@ async def tambaqui_chat(req: TambaquiChatRequest):
             sessao.adicionar("assistant", full_response)
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
         finally:
+            _atividade.concluir(_aid)
             _bp.leave()
 
     return StreamingResponse(_stream(), media_type="text/event-stream")
@@ -2296,6 +2379,11 @@ async def api_deletar_modelo(nome: str):
 @app.get("/api/logs")
 async def api_logs(limit: int = 50):
     return {"logs": API_LOGS[-limit:]}
+
+@app.get("/api/atividade")
+async def api_atividade():
+    """Gerações ao vivo: o que está processando, % (tokens/max), tempo, erro."""
+    return _atividade.snapshot()
 
 @app.get("/api/load-mode")
 async def api_get_load_mode():

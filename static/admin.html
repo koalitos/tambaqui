@@ -254,6 +254,9 @@ details pre{background:var(--bg);padding:.75rem;margin:.25rem 0;border-radius:.4
 
   <!-- LOGS -->
   <section class="panel" id="logs">
+    <div class="card"><div class="card-title"><i class="ic" data-lucide="radio" style="width:16px;height:16px"></i> Atividade ao vivo</div>
+      <p class="card-desc">O que a IA está processando agora — % (tokens gerados ÷ máximo), tempo e erros.</p>
+      <div class="item-list" id="atvList"><div class="empty">Nada processando agora.</div></div></div>
     <div class="card"><div class="card-title"><i class="ic" data-lucide="scroll-text" style="width:16px;height:16px"></i> API Logs</div>
       <p class="card-desc">Últimas chamadas à API em tempo real.</p>
       <div style="max-height:520px;overflow-y:auto;font-family:ui-monospace,monospace;font-size:.6875rem;line-height:1.7" id="apiLogs"><div class="skel skel-row"></div></div></div>
@@ -435,7 +438,22 @@ async function loadLogs(){try{const d=await (await fetch('/api/logs?limit=60')).
     const parts=Object.entries(l).filter(([k])=>k!=='timestamp'&&k!=='tipo').map(([k,v])=>`<span style="color:var(--muted-fg)">${k}=</span>${esc(String(v).substring(0,80))}`).join(' ');
     return`<div style="padding:3px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted-fg)">${t}</span> <span style="color:${cor};font-weight:700">${l.tipo}</span> ${parts}</div>`}).join('')}catch(e){}}
 
-load();loadUsers();loadApiKey();loadDevices();loadLoadMode();loadIdle();loadModo();loadTrust();loadLogs();
+function badgeEstado(e){const m={iniciando:['var(--muted-fg)','iniciando'],buscando_web:['var(--blue)','buscando web'],gerando:['var(--yellow)','gerando'],concluido:['var(--green)','concluído'],erro:['var(--red)','erro']};const[c,l]=m[e]||['var(--muted-fg)',e||'—'];return`<span style="color:${c};font-weight:700">${l}</span>`}
+async function loadAtividade(){try{const d=await (await fetch('/api/atividade')).json();const el=document.getElementById('atvList');const linhas=[];
+  for(const a of (d.atual||[])){const pct=a.percent||0;const err=a.estado==='erro';
+    linhas.push(`<div class="item" style="flex-wrap:wrap">
+      <div class="item-name">${esc(a.mensagem||a.modelo||'—')}<small>${badgeEstado(a.estado)} · ${esc(a.fonte||'')} · ${a.tokens||0} tok · ${a.elapsed||0}s${a.erro?' · <span style="color:var(--red)">'+esc(a.erro)+'</span>':''}</small></div>
+      <span style="font-size:.75rem;font-weight:700;color:${err?'var(--red)':'var(--yellow)'}">${err?'erro':pct+'%'}</span>
+      <div style="width:100%"><div class="progress"><div class="progress-bar" style="width:${Math.max(pct,2)}%;${err?'background:var(--red)':''}"></div></div></div>
+    </div>`)}
+  for(const a of (d.recentes||[]).slice(0,8)){const err=a.estado==='erro';
+    linhas.push(`<div class="item" style="flex-wrap:wrap;opacity:.7">
+      <div class="item-name">${esc(a.mensagem||a.modelo||'—')}<small>${badgeEstado(a.estado)} · ${a.tokens||0} tok · ${a.elapsed||0}s${a.erro?' · <span style="color:var(--red)">'+esc(a.erro)+'</span>':''}</small></div>
+      <span style="font-size:.72rem;color:${err?'var(--red)':'var(--green)'}">${err?'✕':'✓'}</span></div>`)}
+  el.innerHTML=linhas.length?linhas.join(''):'<div class="empty">Nada processando agora.</div>';lucide.createIcons()}catch(e){}}
+
+load();loadUsers();loadApiKey();loadDevices();loadLoadMode();loadIdle();loadModo();loadTrust();loadLogs();loadAtividade();
 setInterval(()=>{load();loadLogs()},2500);
+setInterval(loadAtividade,1200);
 </script>
 </body></html>
