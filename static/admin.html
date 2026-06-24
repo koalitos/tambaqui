@@ -438,12 +438,14 @@ async function loadLogs(){try{const d=await (await fetch('/api/logs?limit=60')).
     const parts=Object.entries(l).filter(([k])=>k!=='timestamp'&&k!=='tipo').map(([k,v])=>`<span style="color:var(--muted-fg)">${k}=</span>${esc(String(v).substring(0,80))}`).join(' ');
     return`<div style="padding:3px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted-fg)">${t}</span> <span style="color:${cor};font-weight:700">${l.tipo}</span> ${parts}</div>`}).join('')}catch(e){}}
 
-function badgeEstado(e){const m={iniciando:['var(--muted-fg)','iniciando'],buscando_web:['var(--blue)','buscando web'],gerando:['var(--yellow)','gerando'],concluido:['var(--green)','concluído'],erro:['var(--red)','erro']};const[c,l]=m[e]||['var(--muted-fg)',e||'—'];return`<span style="color:${c};font-weight:700">${l}</span>`}
+function badgeEstado(e){const m={iniciando:['var(--muted-fg)','iniciando'],buscando_web:['var(--blue)','buscando web'],gerando:['var(--yellow)','gerando'],concluido:['var(--green)','concluído'],cancelado:['var(--muted-fg)','cancelado'],erro:['var(--red)','erro']};const[c,l]=m[e]||['var(--muted-fg)',e||'—'];return`<span style="color:${c};font-weight:700">${l}</span>`}
+async function pararGer(id){await fetch('/api/atividade/'+encodeURIComponent(id)+'/parar',{method:'POST'});toast('Parando geração…');loadAtividade()}
 async function loadAtividade(){try{const d=await (await fetch('/api/atividade')).json();const el=document.getElementById('atvList');const linhas=[];
   for(const a of (d.atual||[])){const pct=a.percent||0;const err=a.estado==='erro';
     linhas.push(`<div class="item" style="flex-wrap:wrap">
       <div class="item-name">${esc(a.mensagem||a.modelo||'—')}<small>${badgeEstado(a.estado)} · ${esc(a.fonte||'')} · ${a.tokens||0} tok · ${a.elapsed||0}s${a.erro?' · <span style="color:var(--red)">'+esc(a.erro)+'</span>':''}</small></div>
       <span style="font-size:.75rem;font-weight:700;color:${err?'var(--red)':'var(--yellow)'}">${err?'erro':pct+'%'}</span>
+      <button class="btn btn-ghost btn-sm" onclick="pararGer('${esc(a.id)}')" title="Parar geração"><i data-lucide="square" style="width:13px;height:13px"></i> Parar</button>
       <div style="width:100%"><div class="progress"><div class="progress-bar" style="width:${Math.max(pct,2)}%;${err?'background:var(--red)':''}"></div></div></div>
     </div>`)}
   for(const a of (d.recentes||[]).slice(0,8)){const err=a.estado==='erro';

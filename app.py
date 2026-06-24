@@ -948,6 +948,11 @@ class ModelManager:
                 device = "cpu"
                 dtype = torch.float16
 
+            # CPU/MPS -> bfloat16: fp16 estoura (no MPS vira LIXO/gibberish; na CPU é emulado/lento).
+            # bf16 tem o mesmo alcance do fp32, sem overflow. CUDA mantém fp16 (ou 4-bit).
+            if not usar_4bit:
+                dtype = torch.float16 if device.startswith("cuda") else torch.bfloat16
+
             self.device_nome = device + (" (4-bit)" if usar_4bit else "")
             logger.info(f"  Device: {self.device_nome} | Modelo: {modelo_gb:.1f}GB | RAM livre: {ram_gb:.1f}GB")
 
@@ -963,10 +968,12 @@ class ModelManager:
                 logger.info("  ⚡ Quantização 4-bit (nf4) ativada — cabe na VRAM e sobra pro KV cache")
             else:
                 load_kwargs["dtype"] = dtype
-                if modelo_gb > 6:
+                # device_map só em CUDA. Em MPS/CPU o modelo é movido pelo .to(device) abaixo —
+                # device_map="auto"/"mps" no Mac causava split/erros e saída corrompida.
+                if device.startswith("cuda") and modelo_gb > 6:
                     load_kwargs["device_map"] = "auto"
                     logger.info(f"  Modelo grande ({modelo_gb:.1f}GB) - usando device_map=auto")
-                elif device != "cpu":
+                elif device.startswith("cuda"):
                     load_kwargs["device_map"] = device
 
             try:
@@ -984,7 +991,7 @@ class ModelManager:
                 except Exception:
                     pass
                 device = "cpu"
-                dtype = torch.float16
+                dtype = torch.bfloat16
                 self.device_nome = device
                 load_kwargs = {"dtype": dtype, "trust_remote_code": trc, "low_cpu_mem_usage": True}
                 self.model = AutoModelForCausalLM.from_pretrained(str(pasta), **load_kwargs)
@@ -1202,8 +1209,9 @@ class ModelManager:
         return self.pronto()
 
     def gerar(self, messages: list, max_tokens: int = 1024, temperature: float = 0.7,
-              top_p: float = 0.9, stream: bool = False, stop: list = None) -> any:
-        """Gera resposta. Se stream=True, retorna generator. `stop` = sequências de parada do cliente."""
+              top_p: float = 0.9, stream: bool = False, stop: list = None, cancel=None) -> any:
+        """Gera resposta. Se stream=True, retorna generator. `stop` = sequências de parada do cliente.
+        `cancel` = threading.Event; quando setado, a geração para (disconnect / botão parar)."""
         mode = self.get_load_mode()
 
         # Sob demanda: carregar antes de gerar
@@ -1217,11 +1225,11 @@ class ModelManager:
         self._resetar_idle_timer()
 
         if stream:
-            return self._gerar_stream_wrapper(messages, max_tokens, temperature, top_p, mode, stop)
+            return self._gerar_stream_wrapper(messages, max_tokens, temperature, top_p, mode, stop, cancel)
         else:
             # Lock: o modelo é único e generate() não é thread-safe — serializa requests concorrentes.
             with self._lock:
-                resultado = self._gerar_completo(messages, max_tokens, temperature, top_p, stop)
+                resultado = self._gerar_completo(messages, max_tokens, temperature, top_p, stop, cancel)
             self._limpar_cache()
             # Sob demanda: descarregar depois de responder
             if mode == "ondemand":
@@ -1229,10 +1237,10 @@ class ModelManager:
                 self.descarregar()
             return resultado
 
-    def _gerar_stream_wrapper(self, messages, max_tokens, temperature, top_p, mode=None, stop=None):
+    def _gerar_stream_wrapper(self, messages, max_tokens, temperature, top_p, mode=None, stop=None, cancel=None):
         """Wrapper do stream que limpa cache e descarrega se ondemand. Segura o lock por toda a geração."""
         with self._lock:
-            for chunk in self._gerar_stream(messages, max_tokens, temperature, top_p, stop):
+            for chunk in self._gerar_stream(messages, max_tokens, temperature, top_p, stop, cancel):
                 yield chunk
         self._limpar_cache()
         if mode == "ondemand":
@@ -1257,7 +1265,7 @@ class ModelManager:
         """True para modelos <=3.5B (decidido pelo nº REAL de params, não pelo nome)."""
         return bool(self.n_params) and self.n_params <= 3.5e9
 
-    def _get_gen_kwargs(self, max_tokens: int, temperature: float, top_p: float, stop: list = None) -> dict:
+    def _get_gen_kwargs(self, max_tokens: int, temperature: float, top_p: float, stop: list = None, cancel=None) -> dict:
         """Kwargs comuns de geração otimizados."""
         kwargs = {
             "max_new_tokens": max_tokens,
@@ -1280,6 +1288,15 @@ class ModelManager:
         if stop:
             kwargs["stop_strings"] = stop if isinstance(stop, list) else [stop]
             kwargs["tokenizer"] = self.tokenizer
+        # Cancelamento: para a geração quando o cliente desconecta ou pede stop (libera RAM/compute).
+        if cancel is not None:
+            from transformers import StoppingCriteria, StoppingCriteriaList
+
+            class _CancelCriteria(StoppingCriteria):
+                def __call__(self, input_ids, scores, **kw):
+                    return cancel.is_set()
+
+            kwargs["stopping_criteria"] = StoppingCriteriaList([_CancelCriteria()])
         return kwargs
 
     def _prepare_inputs(self, messages: list):
@@ -1334,7 +1351,7 @@ class ModelManager:
 
         return resposta
 
-    def _gerar_completo(self, messages: list, max_tokens: int, temperature: float, top_p: float, stop: list = None) -> Optional[str]:
+    def _gerar_completo(self, messages: list, max_tokens: int, temperature: float, top_p: float, stop: list = None, cancel=None) -> Optional[str]:
         if self.backend == "llama":
             return self._llama_completo(messages, max_tokens, temperature, top_p, stop)
         import torch
@@ -1343,7 +1360,7 @@ class ModelManager:
 
         try:
             inputs, input_len = self._prepare_inputs(messages)
-            gen_kwargs = self._get_gen_kwargs(max_tokens, temperature, top_p, stop)
+            gen_kwargs = self._get_gen_kwargs(max_tokens, temperature, top_p, stop, cancel)
 
             with torch.inference_mode():
                 outputs = self.model.generate(**inputs, **gen_kwargs)
@@ -1357,7 +1374,7 @@ class ModelManager:
             logger.error(f"Erro na geração: {e}")
             return None
 
-    def _gerar_stream(self, messages: list, max_tokens: int, temperature: float, top_p: float, stop: list = None) -> Generator:
+    def _gerar_stream(self, messages: list, max_tokens: int, temperature: float, top_p: float, stop: list = None, cancel=None) -> Generator:
         """Gera tokens um a um (streaming)."""
         if self.backend == "llama":
             yield from self._llama_stream(messages, max_tokens, temperature, top_p, stop)
@@ -1373,7 +1390,7 @@ class ModelManager:
             # timeout: se generate() travar/morrer, o iterator NÃO fica preso pra sempre — senão o
             # _lock fica segurado e TODAS as próximas requests penduram (bug do TextIteratorStreamer).
             streamer = TextIteratorStreamer(self.tokenizer, skip_prompt=True, skip_special_tokens=True, timeout=gen_timeout)
-            gen_kwargs = {**inputs, **self._get_gen_kwargs(max_tokens, temperature, top_p, stop), "streamer": streamer}
+            gen_kwargs = {**inputs, **self._get_gen_kwargs(max_tokens, temperature, top_p, stop, cancel), "streamer": streamer}
 
             erro = {}
 
@@ -1389,7 +1406,7 @@ class ModelManager:
                     except Exception:
                         pass
 
-            thread = threading.Thread(target=_gen)
+            thread = threading.Thread(target=_gen, daemon=True)
             thread.start()
 
             try:
@@ -1400,6 +1417,11 @@ class ModelManager:
                 # timeout do streamer (geração travou) — reporta em vez de pendurar
                 logger.error(f"Streamer interrompido: {e}")
                 yield f"\n[Geração interrompida (timeout {gen_timeout}s)]"
+            finally:
+                # Cliente desconectou/parou OU terminou: garante que a thread de geração pare —
+                # sem isso ela continuaria gerando até o fim, alocando RAM/compute à toa.
+                if cancel is not None:
+                    cancel.set()
 
             thread.join(timeout=5)
             if erro:
@@ -1925,7 +1947,7 @@ class Atividade:
             a = self.atual.pop(id, None)
             if not a:
                 return
-            if a.get("estado") != "erro":
+            if a.get("estado") not in ("erro", "cancelado"):
                 a["estado"] = "concluido"
                 a["percent"] = 100
             a["elapsed"] = round(time.time() - a["inicio"], 1)
@@ -1939,6 +1961,31 @@ class Atividade:
 
 
 _atividade = Atividade()
+
+# Cancelamento de geração: id -> threading.Event (acionado pelo botão "parar" ou por disconnect).
+_cancels = {}
+_cancels_lock = threading.Lock()
+
+
+def _novo_cancel(id):
+    ev = threading.Event()
+    with _cancels_lock:
+        _cancels[id] = ev
+    return ev
+
+
+def _disparar_cancel(id) -> bool:
+    with _cancels_lock:
+        ev = _cancels.get(id)
+    if ev:
+        ev.set()
+        return True
+    return False
+
+
+def _remover_cancel(id):
+    with _cancels_lock:
+        _cancels.pop(id, None)
 
 
 def _contar_tokens(text: str) -> int:
@@ -2110,17 +2157,19 @@ async def chat_completions(req: ChatRequest, request: Request):
     _aid = f"chatcmpl-{uuid.uuid4().hex[:8]}"
     _atividade.iniciar(_aid, modelo=manager.modelo_ativo or "", max_tokens=max_tokens,
                        fonte="API", mensagem=last_user_msg[:80], estado="gerando")
+    _cancel = _novo_cancel(_aid)
     try:
         # run_in_threadpool: generate() é bloqueante; sem isso travaria o event loop inteiro
         # (health, /admin, outros usuários congelavam durante cada geração).
         resposta = await run_in_threadpool(
-            manager.gerar, messages, max_tokens, req.temperature, req.top_p, False, req.stop
+            manager.gerar, messages, max_tokens, req.temperature, req.top_p, False, req.stop, _cancel
         ) or ""
         _atividade.set(_aid, tokens=manager.contar_tokens(resposta), percent=100)
     except Exception as _e:
         _atividade.erro(_aid, _e)
         raise
     finally:
+        _remover_cancel(_aid)
         _atividade.concluir(_aid)
         _bp.leave()
 
@@ -2221,12 +2270,13 @@ def _stream_response(messages: list, req: ChatRequest, max_tokens: int = 1024):
     created = int(time.time())
     _msg = next((m.get("content", "")[:80] for m in reversed(messages) if m.get("role") == "user"), "")
     _atividade.iniciar(chat_id, modelo=model, max_tokens=max_tokens, fonte="API", mensagem=_msg, estado="gerando")
+    cancel = _novo_cancel(chat_id)
 
     try:
         # Primeiro chunk: role
         yield f"data: {json.dumps({'id': chat_id, 'object': 'chat.completion.chunk', 'created': created, 'model': model, 'choices': [{'index': 0, 'delta': {'role': 'assistant'}, 'finish_reason': None}]})}\n\n"
 
-        for chunk in manager.gerar(messages, max_tokens, req.temperature, req.top_p, stream=True, stop=req.stop):
+        for chunk in manager.gerar(messages, max_tokens, req.temperature, req.top_p, stream=True, stop=req.stop, cancel=cancel):
             if isinstance(chunk, str) and (chunk.startswith("[Erro") or chunk.startswith("[Geração interrompida")):
                 _atividade.erro(chat_id, chunk)
             else:
@@ -2242,6 +2292,7 @@ def _stream_response(messages: list, req: ChatRequest, max_tokens: int = 1024):
         yield f"data: {json.dumps({'id': chat_id, 'object': 'chat.completion.chunk', 'created': created, 'model': model, 'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}]})}\n\n"
         yield "data: [DONE]\n\n"
     finally:
+        _remover_cancel(chat_id)
         _atividade.concluir(chat_id)
         _bp.leave()
 
@@ -2265,6 +2316,7 @@ async def tambaqui_chat(req: TambaquiChatRequest):
     _aid = "chat-" + sessao.session_id
     _atividade.iniciar(_aid, modelo=manager.modelo_ativo or "", max_tokens=1024, fonte="Chat web",
                        mensagem=req.mensagem[:80], estado="buscando_web" if req.buscar_web else "gerando")
+    _cancel = _novo_cancel(_aid)
 
     def _stream():
         try:
@@ -2293,7 +2345,7 @@ async def tambaqui_chat(req: TambaquiChatRequest):
             full_response = ""
             if manager.pronto():
                 try:
-                    for chunk in manager.gerar(messages, max_tokens=1024, stream=True):
+                    for chunk in manager.gerar(messages, max_tokens=1024, stream=True, cancel=_cancel):
                         if isinstance(chunk, str) and (chunk.startswith("[Erro") or chunk.startswith("[Geração interrompida")):
                             _atividade.erro(_aid, chunk)
                         else:
@@ -2316,6 +2368,7 @@ async def tambaqui_chat(req: TambaquiChatRequest):
             sessao.adicionar("assistant", full_response)
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
         finally:
+            _remover_cancel(_aid)
             _atividade.concluir(_aid)
             _bp.leave()
 
@@ -2384,6 +2437,14 @@ async def api_logs(limit: int = 50):
 async def api_atividade():
     """Gerações ao vivo: o que está processando, % (tokens/max), tempo, erro."""
     return _atividade.snapshot()
+
+@app.post("/api/atividade/{id}/parar")
+async def api_parar(id: str):
+    """Para a geração de um pedido específico (libera RAM/compute imediatamente)."""
+    ok = _disparar_cancel(id)
+    if ok:
+        _atividade.set(id, estado="cancelado")
+    return {"ok": ok}
 
 @app.get("/api/load-mode")
 async def api_get_load_mode():
