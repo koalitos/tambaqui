@@ -19,6 +19,17 @@ services:
       PYTHONUNBUFFERED: "1"
       TAMBAQUI_ADMIN_USER: admin
       TAMBAQUI_ADMIN_PASS: tambaqui
+      # GPU NVIDIA (use a imagem :cuda + nvidia-container-toolkit no host)
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    # Equivalente a `--gpus all` — descomente se tiver GPU NVIDIA:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
 
 x-casaos:
   architectures:

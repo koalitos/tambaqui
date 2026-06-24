@@ -3,7 +3,8 @@ name: Build Docker Image
 on:
   push:
     branches: [main]
-    paths: [app.py, Dockerfile, requirements.txt]
+    paths: [app.py, Dockerfile, Dockerfile.cuda, requirements.txt, "static/**"]
+  workflow_dispatch: {}   # permite disparar a build manualmente (Actions > Run workflow)
 
 env:
   REGISTRY: ghcr.io
@@ -15,6 +16,14 @@ jobs:
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dockerfile: Dockerfile        # CPU
+            tag: latest
+          - dockerfile: Dockerfile.cuda   # GPU NVIDIA (Unraid: tag :cuda + --gpus all)
+            tag: cuda
 
     steps:
       - uses: actions/checkout@v4
@@ -26,12 +35,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build and push (${{ matrix.tag }})
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: ${{ matrix.dockerfile }}
           push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.tag }}
           platforms: linux/amd64

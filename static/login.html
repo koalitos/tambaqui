@@ -6,41 +6,56 @@
 <script src="https://unpkg.com/lucide@latest"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--background:hsl(240 10% 3.9%);--foreground:hsl(0 0% 98%);--card:hsl(240 10% 3.9%);--card-fg:hsl(0 0% 98%);--muted:hsl(240 3.7% 15.9%);--muted-fg:hsl(240 5% 64.9%);--border:hsl(240 3.7% 15.9%);--input:hsl(240 3.7% 15.9%);--primary:hsl(0 0% 98%);--primary-fg:hsl(240 5.9% 10%);--secondary:hsl(240 3.7% 15.9%);--secondary-fg:hsl(0 0% 98%);--destructive:hsl(0 62.8% 30.6%);--ring:hsl(240 4.9% 83.9%);--radius:0.5rem}
-body{font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;background:var(--background);color:var(--foreground);min-height:100vh;display:flex;align-items:center;justify-content:center}
-.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:2rem;width:100%;max-width:24rem;box-shadow:0 1px 2px 0 rgb(0 0 0/.05)}
-.card-header{text-align:center;margin-bottom:1.5rem}
-.card-header h1{font-size:1.5rem;font-weight:600;letter-spacing:-.025em;display:flex;align-items:center;justify-content:center;gap:.5rem}
+:root{--bg:hsl(240 10% 3.9%);--bg2:hsl(240 9% 6%);--fg:hsl(0 0% 98%);--card:hsl(240 8% 7%);
+  --muted-fg:hsl(240 5% 64.9%);--border:hsl(240 4% 16%);--input:hsl(240 4% 16%);
+  --primary:hsl(160 84% 39%);--primary-glow:hsl(160 84% 39%/.35);--radius:.7rem}
+body{font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--fg);min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
+/* fundo animado sutil */
+body::before,body::after{content:'';position:absolute;border-radius:50%;filter:blur(80px);opacity:.18;z-index:0}
+body::before{width:40rem;height:40rem;background:hsl(160 84% 39%);top:-12rem;right:-10rem;animation:float1 14s ease-in-out infinite}
+body::after{width:34rem;height:34rem;background:hsl(217 91% 60%);bottom:-12rem;left:-10rem;animation:float2 16s ease-in-out infinite}
+@keyframes float1{0%,100%{transform:translate(0,0)}50%{transform:translate(-3rem,2rem)}}
+@keyframes float2{0%,100%{transform:translate(0,0)}50%{transform:translate(3rem,-2rem)}}
+.card{position:relative;z-index:1;background:hsl(240 8% 7%/.85);backdrop-filter:blur(14px);border:1px solid var(--border);border-radius:1rem;
+  padding:2.25rem;width:100%;max-width:24rem;box-shadow:0 24px 60px -20px rgb(0 0 0/.7);animation:rise .4s ease}
+@keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+.card-header{text-align:center;margin-bottom:1.75rem}
+.logo{width:3rem;height:3rem;border-radius:.9rem;display:grid;place-items:center;color:#fff;margin:0 auto .75rem;
+  background:linear-gradient(135deg,hsl(160 84% 39%),hsl(190 90% 45%));box-shadow:0 0 24px var(--primary-glow)}
+.card-header h1{font-size:1.4rem;font-weight:750;letter-spacing:-.03em}
 .card-header p{font-size:.875rem;color:var(--muted-fg);margin-top:.25rem}
 .field{margin-bottom:1rem}
-.field label{display:block;font-size:.875rem;font-weight:500;margin-bottom:.375rem}
-.field input{width:100%;height:2.5rem;background:var(--background);border:1px solid var(--input);border-radius:calc(var(--radius) - 2px);padding:0 .75rem;color:var(--foreground);font-size:.875rem;outline:none;transition:box-shadow .15s}
-.field input:focus{box-shadow:0 0 0 2px var(--background),0 0 0 4px var(--ring)}
-.btn{width:100%;height:2.5rem;background:var(--primary);color:var(--primary-fg);border:none;border-radius:calc(var(--radius) - 2px);font-size:.875rem;font-weight:500;cursor:pointer;transition:opacity .15s;margin-top:.5rem}
-.btn:hover{opacity:.9}
-.err{color:hsl(0 84.2% 60.2%);font-size:.875rem;text-align:center;margin-top:.75rem;display:none}
+.field label{display:block;font-size:.8125rem;font-weight:600;margin-bottom:.4rem;color:var(--muted-fg)}
+.field input{width:100%;height:2.6rem;background:var(--bg2);border:1px solid var(--input);border-radius:.55rem;padding:0 .85rem;color:var(--fg);font-size:.9rem;outline:none;transition:.16s}
+.field input:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-glow)}
+.btn{width:100%;height:2.6rem;background:linear-gradient(135deg,hsl(160 84% 39%),hsl(168 84% 38%));color:#fff;border:none;border-radius:.55rem;
+  font-size:.9rem;font-weight:650;cursor:pointer;transition:.16s;margin-top:.6rem;box-shadow:0 4px 16px -4px var(--primary-glow)}
+.btn:hover{filter:brightness(1.08);transform:translateY(-1px)}.btn:active{transform:scale(.98)}
+.err{color:hsl(0 84% 62%);font-size:.8125rem;text-align:center;margin-top:.85rem;display:none;animation:shake .3s}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
 </style>
 </head>
 <body>
 <div class="card">
-    <div class="card-header">
-        <h1><i data-lucide="fish" style="width:24px;height:24px"></i> Tambaqui</h1>
-        <p>Entre com seu usuário</p>
-    </div>
-    <div class="field"><label>Usuário</label><input id="user" autofocus onkeydown="if(event.key==='Enter')document.getElementById('pass').focus()"></div>
-    <div class="field"><label>Senha</label><input id="pass" type="password" onkeydown="if(event.key==='Enter')login()"></div>
-    <button class="btn" onclick="login()">Entrar</button>
-    <div class="err" id="err"></div>
+  <div class="card-header">
+    <div class="logo"><i data-lucide="fish" style="width:26px;height:26px"></i></div>
+    <h1>Tambaqui</h1>
+    <p>IA brasileira de código</p>
+  </div>
+  <div class="field"><label>Usuário</label><input id="user" autofocus onkeydown="if(event.key==='Enter')document.getElementById('pass').focus()"></div>
+  <div class="field"><label>Senha</label><input id="pass" type="password" onkeydown="if(event.key==='Enter')login()"></div>
+  <button class="btn" onclick="login()">Entrar</button>
+  <div class="err" id="err"></div>
 </div>
 <script>
 lucide.createIcons();
 async function login(){
-    const u=document.getElementById('user').value.trim(),p=document.getElementById('pass').value;
-    if(!u||!p)return;
-    const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,senha:p})});
-    const d=await r.json();
-    if(d.ok)window.location.href='/';
-    else{const e=document.getElementById('err');e.textContent=d.erro||'Erro';e.style.display='block'}
+  const u=document.getElementById('user').value.trim(),p=document.getElementById('pass').value;
+  if(!u||!p)return;
+  const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,senha:p})});
+  const d=await r.json();
+  if(d.ok)window.location.href='/';
+  else{const e=document.getElementById('err');e.textContent=d.erro||'Erro';e.style.display='block'}
 }
 </script>
 </body></html>

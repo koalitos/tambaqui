@@ -6,278 +6,422 @@
 <script src="https://unpkg.com/lucide@latest"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:hsl(240 10% 3.9%);--fg:hsl(0 0% 98%);--card:hsl(240 10% 3.9%);--muted:hsl(240 3.7% 15.9%);--muted-fg:hsl(240 5% 64.9%);--border:hsl(240 3.7% 15.9%);--input:hsl(240 3.7% 15.9%);--primary:hsl(0 0% 98%);--primary-fg:hsl(240 5.9% 10%);--secondary:hsl(240 3.7% 15.9%);--accent:hsl(240 3.7% 15.9%);--accent-fg:hsl(0 0% 98%);--destructive:hsl(0 62.8% 30.6%);--destructive-fg:hsl(0 0% 98%);--ring:hsl(240 4.9% 83.9%);--radius:.5rem;--blue:hsl(217.2 91.2% 59.8%);--green:hsl(142.1 76.2% 36.3%);--yellow:hsl(47.9 95.8% 53.1%);--red:hsl(0 84.2% 60.2%)}
-body{font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--fg)}
+:root{
+  --bg:hsl(240 10% 3.9%);--bg2:hsl(240 9% 6%);--fg:hsl(0 0% 98%);
+  --card:hsl(240 8% 7%);--card-hover:hsl(240 8% 9%);
+  --muted:hsl(240 4% 14%);--muted-fg:hsl(240 5% 64.9%);
+  --border:hsl(240 4% 16%);--border2:hsl(240 4% 22%);--input:hsl(240 4% 16%);
+  --primary:hsl(160 84% 39%);--primary-fg:hsl(0 0% 100%);--primary-glow:hsl(160 84% 39%/.35);
+  --secondary:hsl(240 4% 14%);--accent:hsl(240 4% 16%);--accent-fg:hsl(0 0% 98%);
+  --destructive:hsl(0 72% 45%);--destructive-fg:hsl(0 0% 98%);--ring:hsl(160 84% 39%);
+  --radius:.6rem;--blue:hsl(217 91% 60%);--green:hsl(160 84% 42%);--yellow:hsl(40 96% 56%);--red:hsl(0 84% 62%);
+}
+body{font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--fg);min-height:100vh;
+  background-image:radial-gradient(1200px 500px at 80% -10%,hsl(160 84% 39%/.06),transparent),radial-gradient(900px 500px at 0% 0%,hsl(217 91% 60%/.05),transparent)}
+::selection{background:var(--primary-glow)}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:9999px;border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:var(--muted-fg)}
 
 /* Header */
-.header{border-bottom:1px solid var(--border);padding:0 1.5rem;display:flex;align-items:center;gap:.75rem;min-height:3.5rem}
-.header h1{font-size:.875rem;font-weight:600;display:flex;align-items:center;gap:.375rem}
-.header a{margin-left:auto;display:inline-flex;align-items:center;gap:.375rem;color:var(--muted-fg);text-decoration:none;font-size:.8125rem;padding:.375rem .75rem;border:1px solid var(--border);border-radius:calc(var(--radius) - 2px);transition:all .15s}
-.header a:hover{color:var(--fg);border-color:var(--muted-fg)}
+.header{position:sticky;top:0;z-index:30;backdrop-filter:blur(12px);background:hsl(240 10% 3.9%/.75);border-bottom:1px solid var(--border);
+  padding:0 1.5rem;display:flex;align-items:center;gap:.75rem;min-height:3.5rem}
+.header h1{font-size:.9375rem;font-weight:650;display:flex;align-items:center;gap:.5rem;letter-spacing:-.02em}
+.logo{width:1.75rem;height:1.75rem;border-radius:.5rem;display:grid;place-items:center;color:#fff;
+  background:linear-gradient(135deg,hsl(160 84% 39%),hsl(190 90% 45%));box-shadow:0 0 18px var(--primary-glow)}
+.header a.back{margin-left:auto;display:inline-flex;align-items:center;gap:.375rem;color:var(--muted-fg);text-decoration:none;font-size:.8125rem;
+  padding:.4rem .8rem;border:1px solid var(--border);border-radius:.5rem;transition:.18s}
+.header a.back:hover{color:var(--fg);border-color:var(--border2);background:var(--muted);transform:translateY(-1px)}
 
-.container{max-width:56rem;margin:1.5rem auto;padding:0 1.5rem}
+/* Tabs */
+.tabs{position:sticky;top:3.5rem;z-index:20;display:flex;gap:.125rem;padding:.5rem 1.5rem 0;background:hsl(240 10% 3.9%/.6);backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--border);overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{position:relative;background:none;border:none;color:var(--muted-fg);font-size:.8125rem;font-weight:550;padding:.6rem .9rem .7rem;cursor:pointer;
+  white-space:nowrap;display:inline-flex;align-items:center;gap:.4rem;transition:color .18s;border-radius:.4rem .4rem 0 0}
+.tab:hover{color:var(--fg)}
+.tab.active{color:var(--fg)}
+.tab.active::after{content:'';position:absolute;left:.5rem;right:.5rem;bottom:-1px;height:2px;border-radius:2px;
+  background:linear-gradient(90deg,var(--primary),hsl(190 90% 50%));box-shadow:0 0 8px var(--primary-glow);animation:tabin .25s ease}
+@keyframes tabin{from{transform:scaleX(.4);opacity:0}to{transform:scaleX(1);opacity:1}}
 
-/* Card - shadcn */
-.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;margin-bottom:1rem;box-shadow:0 1px 2px 0 rgb(0 0 0/.05)}
-.card-title{font-size:.875rem;font-weight:600;margin-bottom:.75rem;display:flex;align-items:center;gap:.375rem}
-.card-desc{font-size:.8125rem;color:var(--muted-fg);margin:-.375rem 0 .75rem}
+.container{max-width:60rem;margin:1.25rem auto 4rem;padding:0 1.5rem}
+.panel{display:none;animation:fadeUp .28s ease}
+.panel.active{display:block}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* Card */
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;
+  box-shadow:0 1px 2px rgb(0 0 0/.25);transition:border-color .2s,transform .2s,box-shadow .2s}
+.card:hover{border-color:var(--border2)}
+.card-title{font-size:.875rem;font-weight:650;margin-bottom:.875rem;display:flex;align-items:center;gap:.5rem;letter-spacing:-.01em}
+.card-title .ic{color:var(--primary)}
+.card-desc{font-size:.8125rem;color:var(--muted-fg);margin:-.5rem 0 .875rem}
 
 /* Stat grid */
-.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(8rem,1fr));gap:.5rem}
-.stat{background:var(--muted);border:1px solid var(--border);border-radius:calc(var(--radius) - 2px);padding:.75rem;text-align:center}
-.stat-value{font-size:1.25rem;font-weight:700;font-variant-numeric:tabular-nums}
-.stat-label{font-size:.6875rem;color:var(--muted-fg);margin-top:.125rem}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(8rem,1fr));gap:.625rem}
+.stat{position:relative;background:var(--bg2);border:1px solid var(--border);border-radius:.5rem;padding:.875rem;text-align:center;
+  overflow:hidden;transition:.2s}
+.stat:hover{border-color:var(--border2);transform:translateY(-2px)}
+.stat-value{font-size:1.375rem;font-weight:750;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.stat-label{font-size:.6875rem;color:var(--muted-fg);margin-top:.2rem}
 
 /* Buttons */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:.375rem;border-radius:calc(var(--radius) - 2px);font-size:.8125rem;font-weight:500;height:2rem;padding:0 .875rem;cursor:pointer;transition:all .15s;border:none;outline:none;white-space:nowrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;border-radius:.5rem;font-size:.8125rem;font-weight:600;
+  height:2.1rem;padding:0 .9rem;cursor:pointer;transition:.16s;border:none;outline:none;white-space:nowrap;position:relative;overflow:hidden}
+.btn:active{transform:scale(.96)}
 .btn:focus-visible{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--ring)}
-.btn-primary{background:var(--primary);color:var(--primary-fg)}.btn-primary:hover{opacity:.9}
-.btn-secondary{background:var(--secondary);color:var(--accent-fg)}.btn-secondary:hover{background:hsl(240 3.7% 20%)}
-.btn-destructive{background:var(--destructive);color:var(--destructive-fg)}.btn-destructive:hover{opacity:.9}
-.btn-outline{background:transparent;color:var(--fg);border:1px solid var(--input)}.btn-outline:hover{background:var(--accent);color:var(--accent-fg)}
+.btn-primary{background:linear-gradient(135deg,hsl(160 84% 39%),hsl(168 84% 38%));color:var(--primary-fg);box-shadow:0 2px 12px -2px var(--primary-glow)}
+.btn-primary:hover{filter:brightness(1.08);box-shadow:0 4px 18px -2px var(--primary-glow);transform:translateY(-1px)}
+.btn-secondary{background:var(--secondary);color:var(--accent-fg)}.btn-secondary:hover{background:var(--border2)}
+.btn-destructive{background:var(--destructive);color:var(--destructive-fg)}.btn-destructive:hover{filter:brightness(1.1)}
+.btn-outline{background:transparent;color:var(--fg);border:1px solid var(--border2)}.btn-outline:hover{background:var(--muted)}
 .btn-ghost{background:transparent;color:var(--muted-fg)}.btn-ghost:hover{background:var(--accent);color:var(--accent-fg)}
-.btn-sm{height:1.75rem;padding:0 .625rem;font-size:.75rem}
+.btn-sm{height:1.8rem;padding:0 .7rem;font-size:.75rem}
 .btn:disabled{opacity:.5;pointer-events:none}
 
 /* Badge */
-.badge{display:inline-flex;align-items:center;border-radius:9999px;padding:0 .5rem;font-size:.6875rem;font-weight:500;height:1.25rem}
-.badge-green{background:hsl(142.1 76.2% 36.3%/.15);color:var(--green);border:1px solid hsl(142.1 76.2% 36.3%/.3)}
-.badge-secondary{background:var(--secondary);color:var(--accent-fg);border:1px solid var(--border)}
+.badge{display:inline-flex;align-items:center;gap:.25rem;border-radius:9999px;padding:.05rem .55rem;font-size:.6875rem;font-weight:600;height:1.3rem}
+.badge-green{background:hsl(160 84% 39%/.15);color:var(--green);border:1px solid hsl(160 84% 39%/.35)}
+.badge-blue{background:hsl(217 91% 60%/.15);color:var(--blue);border:1px solid hsl(217 91% 60%/.3)}
+.badge-secondary{background:var(--secondary);color:var(--muted-fg);border:1px solid var(--border)}
 
-/* Input */
-input[type=text],input[type=password],select{height:2rem;background:var(--bg);border:1px solid var(--input);border-radius:calc(var(--radius) - 2px);padding:0 .75rem;color:var(--fg);font-size:.8125rem;outline:none;transition:box-shadow .15s}
-input:focus,select:focus{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--ring)}
+/* Inputs */
+input[type=text],input[type=password],input[type=search],select{height:2.1rem;background:var(--bg2);border:1px solid var(--input);border-radius:.5rem;
+  padding:0 .8rem;color:var(--fg);font-size:.8125rem;outline:none;transition:.16s;width:100%}
+input:focus,select:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-glow)}
+input::placeholder{color:var(--muted-fg)}
 
-/* Item list */
+/* Search bar */
+.search{display:flex;gap:.5rem;align-items:center;margin-bottom:1rem}
+.search .ipt{position:relative;flex:1}
+.search .ipt .ic{position:absolute;left:.7rem;top:50%;transform:translateY(-50%);color:var(--muted-fg);pointer-events:none}
+.search .ipt input{padding-left:2.1rem}
+
+/* Item list / grid */
 .item-list{display:flex;flex-direction:column;gap:.5rem}
-.item{display:flex;align-items:center;gap:.75rem;background:var(--muted);border:1px solid var(--border);border-radius:calc(var(--radius) - 2px);padding:.75rem 1rem;transition:border .15s}
-.item.active{border-color:var(--green)}
-.item-name{font-weight:500;font-size:.8125rem;flex:1}
-.item-name small{font-weight:400;color:var(--muted-fg);font-size:.6875rem;display:block;margin-top:1px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));gap:.625rem}
+.item{display:flex;align-items:center;gap:.75rem;background:var(--bg2);border:1px solid var(--border);border-radius:.5rem;padding:.75rem .9rem;transition:.18s}
+.item:hover{border-color:var(--border2);transform:translateY(-2px);box-shadow:0 6px 18px -8px rgb(0 0 0/.6)}
+.item.active{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary-glow)}
+.item-name{font-weight:600;font-size:.8125rem;flex:1;min-width:0}
+.item-name small{font-weight:400;color:var(--muted-fg);font-size:.6875rem;display:block;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .item-meta{font-size:.75rem;color:var(--muted-fg)}
 
-/* Selectable group */
+/* Selectable cards */
 .select-group{display:flex;gap:.5rem;flex-wrap:wrap}
-.select-item{cursor:pointer;flex:1;min-width:12rem;transition:all .15s}
-.select-item:hover{border-color:var(--muted-fg)}
-.select-item.active{border-color:var(--blue)}
-.select-item .item-name{font-size:.8125rem}
+.select-item{cursor:pointer;flex:1;min-width:11rem}
+.select-item.active{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary-glow)}
+.dot{color:var(--muted-fg)}.select-item.active .dot{color:var(--primary)}
 
-/* Progress bar */
-.progress{height:.25rem;background:var(--border);border-radius:9999px;margin-top:.375rem;overflow:hidden}
-.progress-bar{height:100%;border-radius:9999px;transition:width .3s}
+/* Progress */
+.progress{height:.4rem;background:var(--border);border-radius:9999px;margin-top:.4rem;overflow:hidden;position:relative}
+.progress-bar{height:100%;border-radius:9999px;background:linear-gradient(90deg,var(--primary),hsl(190 90% 50%));transition:width .3s;position:relative;overflow:hidden}
+.progress-bar::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgb(255 255 255/.35),transparent);
+  transform:translateX(-100%);animation:shimmer 1.3s infinite}
+@keyframes shimmer{100%{transform:translateX(100%)}}
 
-/* Code box - shadcn style */
-.code-box{background:var(--muted);border:1px solid var(--border);border-radius:calc(var(--radius) - 2px);padding:1rem 1.25rem;font-family:ui-monospace,SFMono-Regular,monospace;font-size:.8125rem;color:var(--muted-fg);line-height:1.7}
-.code-box code{color:var(--blue)}
-.code-box table{width:100%;border-collapse:collapse;margin:.5rem 0}
-.code-box th,.code-box td{border:1px solid var(--border);padding:.5rem .75rem;text-align:left;font-size:.8125rem}
-.code-box th{background:var(--bg);color:var(--fg);font-weight:500}
+/* Skeleton */
+.skel{background:linear-gradient(90deg,var(--muted) 25%,var(--border2) 37%,var(--muted) 63%);background-size:400% 100%;
+  animation:skel 1.4s ease infinite;border-radius:.4rem}
+@keyframes skel{0%{background-position:100% 50%}100%{background-position:0 50%}}
+.skel-row{height:3.4rem;margin-bottom:.5rem}
 
-/* Details/Summary - shadcn accordion style */
-details{border:1px solid var(--border);border-radius:calc(var(--radius) - 2px);margin-bottom:.375rem}
-details summary{cursor:pointer;font-weight:500;font-size:.8125rem;padding:.625rem .875rem;color:var(--fg);transition:all .15s;display:flex;align-items:center;gap:.375rem}
+/* Switch */
+.switch{position:relative;display:inline-flex;align-items:center;cursor:pointer;gap:.6rem;font-size:.8125rem}
+.switch input{display:none}
+.switch .track{width:2.6rem;height:1.5rem;background:var(--border2);border-radius:9999px;transition:.2s;position:relative;flex-shrink:0}
+.switch .track::after{content:'';position:absolute;top:.18rem;left:.18rem;width:1.14rem;height:1.14rem;background:#fff;border-radius:9999px;transition:.2s}
+.switch input:checked+.track{background:var(--primary)}
+.switch input:checked+.track::after{transform:translateX(1.1rem)}
+
+/* Code box / details */
+.code-box{background:var(--bg2);border:1px solid var(--border);border-radius:.5rem;padding:1rem 1.1rem;font-family:ui-monospace,SFMono-Regular,monospace;
+  font-size:.8125rem;color:var(--muted-fg);line-height:1.7}
+.code-box code{color:var(--green)}
+.code-box table{width:100%;border-collapse:collapse;margin:.4rem 0}
+.code-box th,.code-box td{border:1px solid var(--border);padding:.45rem .7rem;text-align:left;font-size:.8125rem}
+.code-box th{background:var(--bg);color:var(--fg);font-weight:600}
+details{border:1px solid var(--border);border-radius:.5rem;margin-bottom:.4rem;overflow:hidden;background:var(--bg2)}
+details summary{cursor:pointer;font-weight:600;font-size:.8125rem;padding:.6rem .85rem;color:var(--fg);transition:.15s;display:flex;align-items:center;gap:.4rem;list-style:none}
+details summary::-webkit-details-marker{display:none}
 details summary:hover{background:var(--muted)}
-details summary::marker{content:''}
-details summary::before{content:'';display:inline-block;width:0;height:0;border-left:4px solid var(--muted-fg);border-top:3px solid transparent;border-bottom:3px solid transparent;transition:transform .15s;margin-right:.25rem}
+details summary::before{content:'';width:0;height:0;border-left:4px solid var(--muted-fg);border-top:3px solid transparent;border-bottom:3px solid transparent;transition:transform .15s}
 details[open] summary::before{transform:rotate(90deg)}
 details[open] summary{border-bottom:1px solid var(--border)}
-details .detail-content{padding:.75rem .875rem}
-details pre{background:var(--bg);padding:.75rem;margin:.375rem 0;border-radius:calc(var(--radius) - 4px);font-size:.75rem;overflow-x:auto;border:1px solid var(--border)}
+details .detail-content{padding:.75rem .85rem}
+details pre{background:var(--bg);padding:.75rem;margin:.25rem 0;border-radius:.4rem;font-size:.75rem;overflow-x:auto;border:1px solid var(--border)}
 
-/* Form row */
 .form-row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+.separator{height:1px;background:var(--border);margin:.75rem 0}
+.empty{color:var(--muted-fg);font-size:.8125rem;padding:1rem;text-align:center}
 
 /* Toast */
-.toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--fg);color:var(--bg);padding:.75rem 1.5rem;border-radius:var(--radius);font-weight:500;font-size:.875rem;display:none;z-index:99;box-shadow:0 10px 15px -3px rgb(0 0 0/.3)}
-
-/* Separator */
-.separator{height:1px;background:var(--border);margin:.75rem 0}
+.toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(2rem);background:var(--card);color:var(--fg);
+  border:1px solid var(--border2);padding:.7rem 1.2rem;border-radius:.7rem;font-weight:600;font-size:.8125rem;opacity:0;pointer-events:none;
+  z-index:99;box-shadow:0 12px 30px -8px rgb(0 0 0/.6);display:flex;align-items:center;gap:.5rem;transition:opacity .25s,transform .25s}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast::before{content:'';width:.5rem;height:.5rem;border-radius:9999px;background:var(--primary);box-shadow:0 0 8px var(--primary)}
+@media(max-width:640px){.container{padding:0 1rem}.tabs{padding:.5rem 1rem 0}}
 </style>
 </head>
 <body>
 <div class="header">
-    <h1><i data-lucide="fish" style="width:16px;height:16px"></i> Tambaqui Admin</h1>
-    <a href="/"><i data-lucide="arrow-left" style="width:14px;height:14px"></i> Chat</a>
+  <h1><span class="logo"><i data-lucide="fish" style="width:16px;height:16px"></i></span> Tambaqui Admin</h1>
+  <a class="back" href="/"><i data-lucide="arrow-left" style="width:14px;height:14px"></i> Chat</a>
 </div>
+
+<div class="tabs" id="tabs">
+  <button class="tab active" data-tab="overview"><i data-lucide="layout-dashboard" style="width:14px;height:14px"></i> Visão geral</button>
+  <button class="tab" data-tab="models"><i data-lucide="box" style="width:14px;height:14px"></i> Modelos</button>
+  <button class="tab" data-tab="config"><i data-lucide="sliders-horizontal" style="width:14px;height:14px"></i> Configurações</button>
+  <button class="tab" data-tab="connect"><i data-lucide="plug" style="width:14px;height:14px"></i> Conexão</button>
+  <button class="tab" data-tab="users"><i data-lucide="users" style="width:14px;height:14px"></i> Usuários</button>
+  <button class="tab" data-tab="logs"><i data-lucide="scroll-text" style="width:14px;height:14px"></i> Logs</button>
+</div>
+
 <div class="container">
 
-<div class="card"><div class="card-title"><i data-lucide="activity" style="width:16px;height:16px"></i> Status</div><div class="stat-grid" id="sts"></div></div>
-<div class="card"><div class="card-title"><i data-lucide="cpu" style="width:16px;height:16px"></i> Sistema</div><div class="stat-grid" id="sys"></div></div>
-<div class="card" id="gpuCard" style="display:none"><div class="card-title"><i data-lucide="monitor" style="width:16px;height:16px"></i> GPU</div><div class="stat-grid" id="gpuStats"></div></div>
+  <!-- OVERVIEW -->
+  <section class="panel active" id="overview">
+    <div class="card"><div class="card-title"><i class="ic" data-lucide="activity" style="width:16px;height:16px"></i> Status</div><div class="stat-grid" id="sts"></div></div>
+    <div class="card"><div class="card-title"><i class="ic" data-lucide="cpu" style="width:16px;height:16px"></i> Sistema</div><div class="stat-grid" id="sys"></div></div>
+    <div class="card" id="gpuCard" style="display:none"><div class="card-title"><i class="ic" data-lucide="monitor" style="width:16px;height:16px"></i> GPU</div><div class="stat-grid" id="gpuStats"></div></div>
+  </section>
 
-<div class="card"><div class="card-title"><i data-lucide="hard-drive" style="width:16px;height:16px"></i> Device</div>
-<p class="card-desc">Escolha onde rodar o modelo. GPU e ~10-50x mais rapido.</p>
-<div class="select-group" id="deviceList"></div>
-<div id="deviceAviso" style="margin-top:.5rem;display:none"><button class="btn btn-primary btn-sm" onclick="recarregarModelo()"><i data-lucide="refresh-cw" style="width:12px;height:12px"></i> Recarregar no novo device</button></div></div>
+  <!-- MODELS -->
+  <section class="panel" id="models">
+    <div class="card"><div class="card-title"><i class="ic" data-lucide="hard-drive-download" style="width:16px;height:16px"></i> Modelos Baixados</div><div class="grid" id="locais"></div></div>
 
-<div class="card"><div class="card-title"><i data-lucide="battery-charging" style="width:16px;height:16px"></i> Energia</div>
-<p class="card-desc">Controle como o modelo usa memoria quando idle.</p>
-<div style="font-size:.75rem;font-weight:500;color:var(--muted-fg);margin-bottom:.375rem">Modo de carregamento</div>
-<div class="select-group" id="loadModeList"></div>
-<div style="font-size:.75rem;font-weight:500;color:var(--muted-fg);margin:.75rem 0 .375rem">Idle timeout (so funciona no modo Manual e Pre-load)</div>
-<div class="select-group" id="idleList"></div></div>
+    <div class="card"><div class="card-title"><i class="ic" data-lucide="search" style="width:16px;height:16px"></i> Buscar no HuggingFace</div>
+      <p class="card-desc">Procure qualquer modelo de geração de texto e baixe com um clique.</p>
+      <div class="search">
+        <div class="ipt"><i class="ic" data-lucide="search" style="width:15px;height:15px"></i>
+          <input type="search" id="hubQ" placeholder="ex: qwen coder, llama 3, deepseek..." onkeydown="if(event.key==='Enter')buscarHub()"></div>
+        <button class="btn btn-primary" onclick="buscarHub()"><i data-lucide="search" style="width:14px;height:14px"></i> Buscar</button>
+      </div>
+      <div class="form-row" style="margin-bottom:.75rem">
+        <input type="text" id="hubRepo" placeholder="ou cole um repo: org/modelo" style="flex:1;min-width:14rem">
+        <button class="btn btn-outline btn-sm" onclick="baixarRepo()"><i data-lucide="download" style="width:12px;height:12px"></i> Baixar repo</button>
+      </div>
+      <div class="grid" id="hubResults"></div>
+    </div>
 
-<div class="card"><div class="card-title"><i data-lucide="settings-2" style="width:16px;height:16px"></i> Modo da API</div>
-<p class="card-desc">Como <code style="background:var(--muted);padding:.0625rem .375rem;border-radius:calc(var(--radius) - 4px);font-size:.75rem">/v1/chat/completions</code> responde.</p>
-<div class="select-group" id="modoList"></div></div>
+    <div class="card"><div class="card-title"><i class="ic" data-lucide="sparkles" style="width:16px;height:16px"></i> Recomendados</div>
+      <p class="card-desc">Modelos de código testados, por tamanho de RAM.</p><div class="grid" id="catalogo"></div></div>
+  </section>
 
-<div class="card"><div class="card-title"><i data-lucide="box" style="width:16px;height:16px"></i> Modelos Baixados</div><div class="item-list" id="locais"></div></div>
-<div class="card"><div class="card-title"><i data-lucide="download" style="width:16px;height:16px"></i> Baixar Modelo</div><p class="card-desc">Modelos de codigo do HuggingFace.</p><div class="item-list" id="catalogo"></div></div>
+  <!-- CONFIG -->
+  <section class="panel" id="config">
+    <div class="card"><div class="card-title"><i class="ic" data-lucide="microchip" style="width:16px;height:16px"></i> Device</div>
+      <p class="card-desc">Onde rodar o modelo. GPU é ~10-50x mais rápido.</p>
+      <div class="select-group" id="deviceList"></div>
+      <div id="deviceAviso" style="margin-top:.6rem;display:none"><button class="btn btn-primary btn-sm" onclick="recarregarModelo()"><i data-lucide="refresh-cw" style="width:12px;height:12px"></i> Recarregar no novo device</button></div></div>
 
-<div class="card" id="usersCard" style="display:none"><div class="card-title"><i data-lucide="users" style="width:16px;height:16px"></i> Usuarios</div><div class="item-list" id="userList"></div>
-<div class="form-row" style="margin-top:.75rem">
-    <input type="text" id="newUser" placeholder="Usuario">
-    <input type="password" id="newPass" placeholder="Senha">
-    <label style="font-size:.75rem;color:var(--muted-fg);display:flex;align-items:center;gap:.25rem"><input type="checkbox" id="newAdmin"> Admin</label>
-    <button class="btn btn-primary btn-sm" onclick="criarUser()"><i data-lucide="plus" style="width:12px;height:12px"></i> Criar</button>
-</div></div>
+    <div class="card"><div class="card-title"><i class="ic" data-lucide="battery-charging" style="width:16px;height:16px"></i> Energia</div>
+      <p class="card-desc">Como o modelo usa memória quando ocioso.</p>
+      <div style="font-size:.75rem;font-weight:600;color:var(--muted-fg);margin-bottom:.4rem">Modo de carregamento</div>
+      <div class="select-group" id="loadModeList"></div>
+      <div style="font-size:.75rem;font-weight:600;color:var(--muted-fg);margin:.8rem 0 .4rem">Idle timeout (modos Manual e Pre-load)</div>
+      <div class="select-group" id="idleList"></div></div>
 
-<div class="card"><div class="card-title"><i data-lucide="key" style="width:16px;height:16px"></i> API Key</div><div class="code-box" id="apiKeyInfo">Carregando...</div>
-<button class="btn btn-outline btn-sm" onclick="regenKey()" style="margin-top:.75rem"><i data-lucide="refresh-cw" style="width:12px;height:12px"></i> Regenerar</button></div>
+    <div class="card"><div class="card-title"><i class="ic" data-lucide="settings-2" style="width:16px;height:16px"></i> Modo da API</div>
+      <p class="card-desc">Como <code style="background:var(--muted);padding:.05rem .35rem;border-radius:.3rem;font-size:.75rem">/v1/chat/completions</code> responde.</p>
+      <div class="select-group" id="modoList"></div></div>
 
-<div class="card"><div class="card-title"><i data-lucide="plug" style="width:16px;height:16px"></i> Como Conectar</div><div id="connectInfo">Carregando...</div></div>
+    <div class="card"><div class="card-title"><i class="ic" data-lucide="shield-alert" style="width:16px;height:16px"></i> Segurança</div>
+      <p class="card-desc">trust_remote_code executa código do repo do modelo. Deixe <b>desligado</b>, ligue só pra modelos confiáveis que exijam.</p>
+      <label class="switch"><input type="checkbox" id="trcToggle" onchange="setTrust(this.checked)"><span class="track"></span><span>Permitir trust_remote_code</span></label></div>
+  </section>
 
-<div class="card"><div class="card-title"><i data-lucide="scroll-text" style="width:16px;height:16px"></i> API Logs</div>
-<p class="card-desc">Ultimas chamadas a API em tempo real.</p>
-<div style="max-height:400px;overflow-y:auto;font-family:ui-monospace,monospace;font-size:.6875rem;line-height:1.6" id="apiLogs">Carregando...</div></div>
+  <!-- CONNECT -->
+  <section class="panel" id="connect">
+    <div class="card"><div class="card-title"><i class="ic" data-lucide="key" style="width:16px;height:16px"></i> API Key</div><div class="code-box" id="apiKeyInfo"><div class="skel skel-row"></div></div>
+      <button class="btn btn-outline btn-sm" onclick="regenKey()" style="margin-top:.75rem"><i data-lucide="refresh-cw" style="width:12px;height:12px"></i> Regenerar</button></div>
+    <div class="card"><div class="card-title"><i class="ic" data-lucide="plug" style="width:16px;height:16px"></i> Como Conectar</div><div id="connectInfo"><div class="skel skel-row"></div></div></div>
+  </section>
+
+  <!-- USERS -->
+  <section class="panel" id="users">
+    <div class="card" id="usersCard"><div class="card-title"><i class="ic" data-lucide="users" style="width:16px;height:16px"></i> Usuários</div><div class="item-list" id="userList"></div>
+      <div class="form-row" style="margin-top:.75rem">
+        <input type="text" id="newUser" placeholder="Usuário" style="flex:1;min-width:8rem">
+        <input type="password" id="newPass" placeholder="Senha" style="flex:1;min-width:8rem">
+        <label class="switch" style="font-size:.75rem"><input type="checkbox" id="newAdmin"><span class="track"></span><span>Admin</span></label>
+        <button class="btn btn-primary btn-sm" onclick="criarUser()"><i data-lucide="user-plus" style="width:12px;height:12px"></i> Criar</button>
+      </div></div>
+  </section>
+
+  <!-- LOGS -->
+  <section class="panel" id="logs">
+    <div class="card"><div class="card-title"><i class="ic" data-lucide="scroll-text" style="width:16px;height:16px"></i> API Logs</div>
+      <p class="card-desc">Últimas chamadas à API em tempo real.</p>
+      <div style="max-height:520px;overflow-y:auto;font-family:ui-monospace,monospace;font-size:.6875rem;line-height:1.7" id="apiLogs"><div class="skel skel-row"></div></div></div>
+  </section>
 
 </div>
 <div class="toast" id="toast"></div>
 <script>
 lucide.createIcons();
-function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',3000)}
+let toastT=null;
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2600)}
 function bc(p){return p>80?'var(--red)':p>60?'var(--yellow)':'var(--green)'}
+function esc(s){const d=document.createElement('div');d.textContent=s==null?'':s;return d.innerHTML}
+function fmtN(n){n=+n||0;return n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(0)+'k':''+n}
+
+/* Tabs */
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');document.getElementById(t.dataset.tab).classList.add('active');lucide.createIcons();
+});
 
 async function load(){
-    const r=await fetch('/api/status'),d=await r.json();
-    document.getElementById('sts').innerHTML=`
-        <div class="stat"><div class="stat-value" style="font-size:.9375rem">${d.modelo_ativo||'—'}</div><div class="stat-label">Modelo</div></div>
-        <div class="stat"><div class="stat-value" style="color:${d.pronto?'var(--green)':'var(--red)'}">${d.pronto?'Online':'Off'}</div><div class="stat-label">Status</div></div>
-        <div class="stat"><div class="stat-value" style="font-size:.9375rem">${d.device||'—'}</div><div class="stat-label">Device</div></div>
-        <div class="stat"><div class="stat-value" style="color:${d.warmup?'var(--green)':'var(--muted-fg)'}">${d.warmup?'Quente':'Frio'}</div><div class="stat-label">Pre-load</div></div>
-        <div class="stat"><div class="stat-value" style="color:${d.carregando?'var(--yellow)':'var(--muted-fg)'}">${d.carregando?'Sim':'—'}</div><div class="stat-label">Carregando</div></div>`;
-    document.getElementById('sys').innerHTML=`
-        <div class="stat"><div class="stat-value" style="color:${bc(d.cpu_percent||0)}">${d.cpu_percent||0}%</div><div class="stat-label">CPU (${d.cpu_count})</div></div>
-        <div class="stat"><div class="stat-value" style="color:${bc(d.ram_percent||0)}">${d.ram_percent||0}%</div><div class="stat-label">RAM ${d.ram_usada_gb||0}/${d.ram_total_gb||0}G</div></div>
-        <div class="stat"><div class="stat-value">${d.proc_ram_mb||0}MB</div><div class="stat-label">Processo</div></div>
-        <div class="stat"><div class="stat-value" style="font-size:.875rem">${d.platform||''}</div><div class="stat-label">Py ${d.python||''}</div></div>`;
-    const gc=document.getElementById('gpuCard'),gs=document.getElementById('gpuStats');
-    if(d.gpus&&d.gpus.length){gc.style.display='block';
-        gs.innerHTML=d.gpus.map(g=>g.tipo==='cuda'?
-            `<div class="stat"><div class="stat-value" style="color:${bc(g.vram_percent)}">${g.vram_percent}%</div><div class="stat-label">${g.nome}</div></div><div class="stat"><div class="stat-value">${g.vram_usada_gb}/${g.vram_total_gb}G</div><div class="stat-label">VRAM</div></div>`:
-            `<div class="stat"><div class="stat-value" style="color:var(--blue)">${g.vram_usada_gb}G</div><div class="stat-label">${g.nome}</div></div>`).join('')}else{gc.style.display='none'}
+  try{
+  const r=await fetch('/api/status'),d=await r.json();
+  document.getElementById('sts').innerHTML=`
+    <div class="stat"><div class="stat-value" style="font-size:.95rem">${esc(d.modelo_ativo)||'—'}</div><div class="stat-label">Modelo</div></div>
+    <div class="stat"><div class="stat-value" style="color:${d.pronto?'var(--green)':'var(--red)'}">${d.pronto?'Online':'Off'}</div><div class="stat-label">Status</div></div>
+    <div class="stat"><div class="stat-value" style="font-size:.95rem">${esc(d.device)||'—'}</div><div class="stat-label">Device</div></div>
+    <div class="stat"><div class="stat-value" style="color:${d.warmup?'var(--green)':'var(--muted-fg)'}">${d.warmup?'Quente':'Frio'}</div><div class="stat-label">Pre-load</div></div>
+    <div class="stat"><div class="stat-value" style="color:${d.carregando?'var(--yellow)':'var(--muted-fg)'}">${d.carregando?'Sim':'—'}</div><div class="stat-label">Carregando</div></div>`;
+  document.getElementById('sys').innerHTML=`
+    <div class="stat"><div class="stat-value" style="color:${bc(d.cpu_percent||0)}">${d.cpu_percent||0}%</div><div class="stat-label">CPU (${d.cpu_count||0})</div></div>
+    <div class="stat"><div class="stat-value" style="color:${bc(d.ram_percent||0)}">${d.ram_percent||0}%</div><div class="stat-label">RAM ${d.ram_usada_gb||0}/${d.ram_total_gb||0}G</div></div>
+    <div class="stat"><div class="stat-value">${d.proc_ram_mb||0}MB</div><div class="stat-label">Processo</div></div>
+    <div class="stat"><div class="stat-value" style="font-size:.9rem">${esc(d.platform)||''}</div><div class="stat-label">Py ${esc(d.python)||''}</div></div>`;
+  const gc=document.getElementById('gpuCard'),gs=document.getElementById('gpuStats');
+  if(d.gpus&&d.gpus.length){gc.style.display='block';
+    gs.innerHTML=d.gpus.map(g=>g.tipo==='cuda'?
+      `<div class="stat"><div class="stat-value" style="color:${bc(g.vram_percent)}">${g.vram_percent}%</div><div class="stat-label">${esc(g.nome)}</div></div><div class="stat"><div class="stat-value">${g.vram_usada_gb}/${g.vram_total_gb}G</div><div class="stat-label">VRAM</div></div>`:
+      `<div class="stat"><div class="stat-value" style="color:var(--blue)">${g.vram_usada_gb}G</div><div class="stat-label">${esc(g.nome)}</div></div>`).join('')}else{gc.style.display='none'}
 
-    const r2=await fetch('/api/modelos'),d2=await r2.json();
-    document.getElementById('locais').innerHTML=!d2.locais.length?'<p style="color:var(--muted-fg);font-size:.8125rem">Nenhum modelo baixado</p>':
-        d2.locais.map(m=>`<div class="item ${m.ativo?'active':''}">
-            <div class="item-name">${m.nome} ${m.ativo?'<span class="badge badge-green">ativo</span>':''}<small>${m.tamanho_gb} GB</small></div>
-            ${!m.ativo?`<button class="btn btn-primary btn-sm" onclick="carregar('${m.nome}')">Carregar</button>`:''}
-            ${!m.ativo?`<button class="btn btn-ghost btn-sm" onclick="deletar('${m.nome}')"><i data-lucide="trash-2" style="width:12px;height:12px"></i></button>`:''}
-            ${m.ativo?`<button class="btn btn-outline btn-sm" onclick="descarregar()">Descarregar</button>`:''}
-        </div>`).join('');
-    document.getElementById('catalogo').innerHTML=d2.catalogo.map(m=>{
-        const dl=d.downloads&&d.downloads[m.nome];const baixando=dl||m.baixando;
-        let btn='',prog='';
-        if(m.baixado&&!baixando){btn='<span class="badge badge-green">Baixado</span>'}
-        else if(baixando){const pct=dl?dl.percent||0:0;const cor=pct<0?'var(--red)':pct>=100?'var(--green)':'var(--blue)';
-            btn=`<span style="color:var(--yellow);font-size:.75rem;font-weight:500">${pct>=0?pct+'%':dl?dl.status:'...'}</span>`;
-            prog=`<div style="width:100%;margin-top:.25rem"><div class="progress"><div class="progress-bar" style="width:${Math.max(pct,2)}%;background:${cor}"></div></div><div style="font-size:.625rem;color:var(--muted-fg);margin-top:.125rem">${dl?dl.arquivo||'':''} ${dl&&dl.velocidade?'· '+dl.velocidade:''}</div></div>`}
-        else{btn=`<button class="btn btn-primary btn-sm" onclick="baixar('${m.nome}')"><i data-lucide="download" style="width:12px;height:12px"></i> Baixar</button>`}
-        return`<div class="item" style="flex-wrap:wrap"><div class="item-name">${m.nome}<small>${m.desc} · ${m.params} · ${m.ram} RAM</small></div>${btn}${prog||''}</div>`}).join('');
-    lucide.createIcons()}
+  const d2=await (await fetch('/api/modelos')).json();
+  document.getElementById('locais').innerHTML=!d2.locais.length?'<p class="empty">Nenhum modelo baixado — busque um na aba acima.</p>':
+    d2.locais.map(m=>`<div class="item ${m.ativo?'active':''}">
+      <div class="item-name">${esc(m.nome)} ${m.ativo?'<span class="badge badge-green">ativo</span>':''}<small>${m.tamanho_gb} GB</small></div>
+      ${!m.ativo?`<button class="btn btn-primary btn-sm" onclick="carregar('${esc(m.nome)}')">Carregar</button>`:'<button class="btn btn-outline btn-sm" onclick="descarregar()">Descarregar</button>'}
+      ${!m.ativo?`<button class="btn btn-ghost btn-sm" onclick="deletar('${esc(m.nome)}')"><i data-lucide="trash-2" style="width:12px;height:12px"></i></button>`:''}
+    </div>`).join('');
+  document.getElementById('catalogo').innerHTML=d2.catalogo.map(m=>{
+    const dl=d.downloads&&d.downloads[m.nome];const baixando=dl||m.baixando;let btn='',prog='';
+    if(m.baixado&&!baixando){btn='<span class="badge badge-green"><i data-lucide="check" style="width:11px;height:11px"></i> Baixado</span>'}
+    else if(baixando){const pct=dl?dl.percent||0:0;
+      btn=`<span style="color:var(--yellow);font-size:.75rem;font-weight:600">${pct>=0?pct+'%':dl?dl.status:'...'}</span>`;
+      prog=`<div style="width:100%;margin-top:.3rem"><div class="progress"><div class="progress-bar" style="width:${Math.max(pct,2)}%"></div></div><div style="font-size:.625rem;color:var(--muted-fg);margin-top:.15rem">${esc(dl?dl.arquivo||'':'')} ${dl&&dl.velocidade?'· '+esc(dl.velocidade):''}</div></div>`}
+    else{btn=`<button class="btn btn-primary btn-sm" onclick="baixar('${esc(m.nome)}')"><i data-lucide="download" style="width:12px;height:12px"></i> Baixar</button>`}
+    return`<div class="item" style="flex-wrap:wrap"><div class="item-name">${esc(m.nome)}<small>${esc(m.desc)} · ${m.params} · ${m.ram} RAM</small></div>${btn}${prog||''}</div>`}).join('');
+  lucide.createIcons()}catch(e){}}
+
+/* HF search */
+async function buscarHub(){const q=document.getElementById('hubQ').value.trim();const el=document.getElementById('hubResults');
+  el.innerHTML='<div class="skel skel-row"></div><div class="skel skel-row"></div><div class="skel skel-row"></div>';
+  try{const d=await (await fetch('/api/hub/buscar?q='+encodeURIComponent(q)+'&limit=24')).json();
+    if(!d.resultados||!d.resultados.length){el.innerHTML='<p class="empty">Nada encontrado.</p>';return}
+    el.innerHTML=d.resultados.map(m=>{const isG=/gguf/i.test(m.id);
+      const btn=m.baixado?'<span class="badge badge-green"><i data-lucide="check" style="width:11px;height:11px"></i> Baixado</span>'
+        :m.baixando?'<span class="badge badge-secondary">baixando…</span>'
+        :isG?`<button class="btn btn-secondary btn-sm" onclick="pickGguf('${esc(m.id)}',this)"><i data-lucide="layers" style="width:12px;height:12px"></i> Quants</button>`
+        :`<button class="btn btn-primary btn-sm" onclick="baixar('${esc(m.id)}')"><i data-lucide="download" style="width:12px;height:12px"></i> Baixar</button>`;
+      return`<div class="item" style="flex-wrap:wrap"><div class="item-name">${esc(m.id)}${isG?' <span class="badge badge-blue" style="height:1rem">GGUF</span>':''}
+        <small><i data-lucide="download" style="width:10px;height:10px;vertical-align:-1px"></i> ${fmtN(m.downloads)} · <i data-lucide="heart" style="width:10px;height:10px;vertical-align:-1px"></i> ${fmtN(m.likes)}${m.tamanho_hint?' · '+m.tamanho_hint:''}${m.gated?' · 🔒':''}</small></div>${btn}</div>`}).join('');
+    lucide.createIcons()}catch(e){el.innerHTML='<p class="empty">Erro na busca.</p>'}}
+async function pickGguf(repo,btn){const item=btn.closest('.item');btn.disabled=true;btn.textContent='…';
+  try{const d=await (await fetch('/api/hub/gguf?repo='+encodeURIComponent(repo))).json();
+  if(!d.arquivos||!d.arquivos.length){toast('Nenhum .gguf no repo');btn.disabled=false;btn.innerHTML='Quants';return}
+  const box=document.createElement('div');box.style.cssText='width:100%;margin-top:.5rem;display:flex;flex-direction:column;gap:.3rem';
+  box.innerHTML=d.arquivos.map(f=>`<div style="display:flex;align-items:center;gap:.5rem;justify-content:space-between;font-size:.72rem">
+    <span style="color:var(--muted-fg);font-family:ui-monospace,monospace;overflow:hidden;text-overflow:ellipsis">${esc(f.arquivo)} · ${f.tamanho_gb}GB</span>
+    <button class="btn btn-primary btn-sm" onclick="baixarGgufFile('${esc(repo)}','${esc(f.arquivo)}')"><i data-lucide="download" style="width:11px;height:11px"></i></button></div>`).join('');
+  item.appendChild(box);btn.style.display='none';lucide.createIcons()}catch(e){btn.disabled=false;btn.innerHTML='Quants'}}
+async function baixarGgufFile(repo,arq){const d=await (await fetch('/api/modelos/baixar-gguf?repo='+encodeURIComponent(repo)+'&arquivo='+encodeURIComponent(arq),{method:'POST'})).json();
+  toast(d.status||'Download iniciado');
+  if(dlPoll)clearInterval(dlPoll);dlPoll=setInterval(async()=>{await load();const d2=await (await fetch('/api/status')).json();if(!d2.downloads||!Object.keys(d2.downloads).length){clearInterval(dlPoll);dlPoll=null;toast('Download concluído!');load()}},2000)}
+function baixarRepo(){const r=document.getElementById('hubRepo').value.trim();if(!r){toast('Cole um repo org/modelo');return}baixar(r);document.getElementById('hubRepo').value=''}
 
 let dlPoll=null;
-async function baixar(n){const r=await fetch('/api/modelos/baixar?nome='+n,{method:'POST'});const d=await r.json();toast(d.status||'Download iniciado');
-    if(d.status==='Modelo já existe'){load();return}setTimeout(load,1000);
-    if(dlPoll)clearInterval(dlPoll);dlPoll=setInterval(async()=>{await load();const r2=await fetch('/api/status');const d2=await r2.json();
-        if(!d2.downloads||Object.keys(d2.downloads).length===0){clearInterval(dlPoll);dlPoll=null;toast('Download concluido!');load()}},2000)}
-async function carregar(n){await fetch('/api/modelos/carregar?nome='+n,{method:'POST'});toast('Carregando...');setTimeout(load,3000)}
+async function baixar(n){const d=await (await fetch('/api/modelos/baixar?nome='+encodeURIComponent(n),{method:'POST'})).json();toast(d.status||'Download iniciado');
+  if(d.status==='Modelo já existe'){load();return}setTimeout(load,800);
+  if(dlPoll)clearInterval(dlPoll);dlPoll=setInterval(async()=>{await load();const d2=await (await fetch('/api/status')).json();
+    if(!d2.downloads||!Object.keys(d2.downloads).length){clearInterval(dlPoll);dlPoll=null;toast('Download concluído!');load()}},2000)}
+async function carregar(n){await fetch('/api/modelos/carregar?nome='+encodeURIComponent(n),{method:'POST'});toast('Carregando…');setTimeout(load,3000)}
 async function descarregar(){await fetch('/api/modelos/descarregar',{method:'POST'});toast('Descarregado');load()}
-async function deletar(n){if(!confirm('Remover '+n+'?'))return;await fetch('/api/modelos/'+n,{method:'DELETE'});toast('Removido');load()}
-async function recarregarModelo(){const r=await fetch('/api/status');const d=await r.json();if(!d.modelo_ativo)return;
-    toast('Recarregando...');await fetch('/api/modelos/descarregar',{method:'POST'});await fetch('/api/modelos/carregar?nome='+d.modelo_ativo,{method:'POST'});
-    document.getElementById('deviceAviso').style.display='none';setTimeout(load,3000)}
+async function deletar(n){if(!confirm('Remover '+n+'?'))return;await fetch('/api/modelos/'+encodeURIComponent(n),{method:'DELETE'});toast('Removido');load()}
+async function recarregarModelo(){const d=await (await fetch('/api/status')).json();if(!d.modelo_ativo)return;
+  toast('Recarregando…');await fetch('/api/modelos/descarregar',{method:'POST'});await fetch('/api/modelos/carregar?nome='+encodeURIComponent(d.modelo_ativo),{method:'POST'});
+  document.getElementById('deviceAviso').style.display='none';setTimeout(load,3000)}
 
-async function loadDevices(){try{const r=await fetch('/api/devices');const d=await r.json();
-    document.getElementById('deviceList').innerHTML=d.devices.map(dv=>`<div class="item select-item ${dv.id===d.atual?'active':''}" onclick="setDevice('${dv.id}')">
-        <div class="item-name">${dv.id===d.atual?'●':'○'} ${dv.nome}<small>${dv.info}</small></div></div>`).join('');lucide.createIcons()}catch(e){}}
-async function setDevice(id){await fetch('/api/devices?device='+id,{method:'POST'});document.getElementById('deviceAviso').style.display='block';toast('Device: '+id);loadDevices();load()}
+async function loadDevices(){try{const d=await (await fetch('/api/devices')).json();
+  document.getElementById('deviceList').innerHTML=d.devices.map(dv=>`<div class="item select-item ${dv.id===d.atual?'active':''}" onclick="setDevice('${esc(dv.id)}')">
+    <div class="item-name"><span class="dot">${dv.id===d.atual?'●':'○'}</span> ${esc(dv.nome)}<small>${esc(dv.info)}</small></div></div>`).join('')}catch(e){}}
+async function setDevice(id){await fetch('/api/devices?device='+encodeURIComponent(id),{method:'POST'});document.getElementById('deviceAviso').style.display='block';toast('Device: '+id);loadDevices();load()}
 
-async function loadLoadMode(){try{const r=await fetch('/api/load-mode');const d=await r.json();const cur=d.load_mode;
-    document.getElementById('loadModeList').innerHTML=[
-        {v:'manual',l:'Manual',d:'Voce carrega pelo admin. Fica na RAM ate descarregar.'},
-        {v:'preload',l:'Pre-load',d:'Carrega automatico ao iniciar o servidor.'},
-        {v:'ondemand',l:'Sob demanda',d:'Carrega quando chega request, responde, descarrega. 0% RAM no idle.'}
-    ].map(o=>{const sel=(o.v===cur);
-        return`<div class="item select-item ${sel?'active':''}" onclick="setLoadMode('${o.v}')" style="flex:1;min-width:10rem"><div class="item-name">${sel?'●':'○'} ${o.l}<small>${o.d}</small></div></div>`}).join('')}catch(e){}}
+async function loadLoadMode(){try{const cur=(await (await fetch('/api/load-mode')).json()).load_mode;
+  document.getElementById('loadModeList').innerHTML=[
+    {v:'manual',l:'Manual',d:'Você carrega pelo admin. Fica na RAM até descarregar.'},
+    {v:'preload',l:'Pre-load',d:'Carrega automático ao iniciar o servidor.'},
+    {v:'ondemand',l:'Sob demanda',d:'Carrega no request, responde, descarrega. 0% RAM ocioso.'}
+  ].map(o=>`<div class="item select-item ${o.v===cur?'active':''}" onclick="setLoadMode('${o.v}')" style="min-width:10rem"><div class="item-name"><span class="dot">${o.v===cur?'●':'○'}</span> ${o.l}<small>${o.d}</small></div></div>`).join('')}catch(e){}}
 async function setLoadMode(v){await fetch('/api/load-mode?mode='+v,{method:'POST'});toast('Modo: '+v);loadLoadMode()}
 
-async function loadIdle(){try{const r=await fetch('/api/idle');const d=await r.json();const cur=d.idle_timeout_min;
-    document.getElementById('idleList').innerHTML=[{v:0,l:'Sempre ligado'},{v:5,l:'5 min'},{v:15,l:'15 min'},{v:30,l:'30 min'},{v:60,l:'1 hora'}].map(o=>{const sel=o.v===cur;
-        return`<div class="item select-item ${sel?'active':''}" onclick="setIdle(${o.v})" style="flex:1;min-width:6rem"><div class="item-name">${sel?'●':'○'} ${o.l}</div></div>`}).join('')}catch(e){}}
+async function loadIdle(){try{const cur=(await (await fetch('/api/idle')).json()).idle_timeout_min;
+  document.getElementById('idleList').innerHTML=[{v:0,l:'Sempre ligado'},{v:5,l:'5 min'},{v:15,l:'15 min'},{v:30,l:'30 min'},{v:60,l:'1 hora'}].map(o=>
+    `<div class="item select-item ${o.v===cur?'active':''}" onclick="setIdle(${o.v})" style="min-width:6rem"><div class="item-name"><span class="dot">${o.v===cur?'●':'○'}</span> ${o.l}</div></div>`).join('')}catch(e){}}
 async function setIdle(m){await fetch('/api/idle?minutes='+m,{method:'POST'});toast(m?'Idle: '+m+' min':'Sempre ligado');loadIdle()}
 
-async function loadModo(){try{const r=await fetch('/api/mode');const d=await r.json();const modo=d.mode;
-    document.getElementById('modoList').innerHTML=[{id:'direto',l:'So Modelo',d:'Rapido. Ideal pra CLIs.'},{id:'busca',l:'Modelo + Busca',d:'Pesquisa antes.'}].map(m=>{const sel=m.id===modo;
-        return`<div class="item select-item ${sel?'active':''}" onclick="setModo('${m.id}')" style="flex:1"><div class="item-name">${sel?'●':'○'} ${m.l}<small>${m.d}</small></div></div>`}).join('')}catch(e){}}
+async function loadModo(){try{const modo=(await (await fetch('/api/mode')).json()).mode;
+  document.getElementById('modoList').innerHTML=[{id:'direto',l:'Só Modelo',d:'Rápido. Ideal pra CLIs.'},{id:'busca',l:'Modelo + Busca',d:'Pesquisa na web antes.'}].map(m=>
+    `<div class="item select-item ${m.id===modo?'active':''}" onclick="setModo('${m.id}')"><div class="item-name"><span class="dot">${m.id===modo?'●':'○'}</span> ${m.l}<small>${m.d}</small></div></div>`).join('')}catch(e){}}
 async function setModo(m){await fetch('/api/mode?mode='+m,{method:'POST'});toast('Modo: '+m);loadModo()}
 
-async function loadUsers(){try{const r=await fetch('/api/auth/users');if(r.status===403)return;const d=await r.json();
-    document.getElementById('usersCard').style.display='block';
-    document.getElementById('userList').innerHTML=!d.users||!d.users.length?'':d.users.map(u=>`<div class="item" style="flex-wrap:wrap">
-        <div class="item-name">${u.username} ${u.admin?'<span class="badge badge-green">admin</span>':''}</div>
-        <button class="btn btn-outline btn-sm" onclick="trocarSenha('${u.username}')">Senha</button>
-        <button class="btn btn-ghost btn-sm" onclick="deletarUser('${u.username}')"><i data-lucide="trash-2" style="width:12px;height:12px"></i></button>
-        <div style="width:100%;font-size:.6875rem;color:var(--muted-fg);margin-top:.25rem;font-family:ui-monospace,monospace">Key: ${u.api_key||'—'}</div>
-    </div>`).join('');lucide.createIcons()}catch(e){}}
+async function loadTrust(){try{const d=await (await fetch('/api/trust-remote-code')).json();document.getElementById('trcToggle').checked=!!d.trust_remote_code}catch(e){}}
+async function setTrust(v){await fetch('/api/trust-remote-code?val='+(v?'true':'false'),{method:'POST'});toast('trust_remote_code: '+(v?'ON':'OFF'))}
+
+async function loadUsers(){try{const r=await fetch('/api/auth/users');if(r.status===403){document.querySelector('[data-tab=users]').style.display='none';return}const d=await r.json();
+  document.getElementById('userList').innerHTML=!d.users||!d.users.length?'<p class="empty">Nenhum usuário.</p>':d.users.map(u=>`<div class="item" style="flex-wrap:wrap">
+    <div class="item-name">${esc(u.username)} ${u.admin?'<span class="badge badge-green">admin</span>':''}</div>
+    <button class="btn btn-outline btn-sm" onclick="trocarSenha('${esc(u.username)}')">Senha</button>
+    <button class="btn btn-ghost btn-sm" onclick="deletarUser('${esc(u.username)}')"><i data-lucide="trash-2" style="width:12px;height:12px"></i></button>
+    <div style="width:100%;font-size:.6875rem;color:var(--muted-fg);margin-top:.25rem;font-family:ui-monospace,monospace">Key: ${esc(u.api_key)||'—'}</div>
+  </div>`).join('');lucide.createIcons()}catch(e){}}
 async function criarUser(){const u=document.getElementById('newUser').value.trim(),p=document.getElementById('newPass').value,a=document.getElementById('newAdmin').checked;
-    if(!u||!p){toast('Preencha tudo');return}const r=await fetch('/api/auth/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,senha:p,admin:a})});
-    const d=await r.json();if(d.ok){toast('Criado');document.getElementById('newUser').value='';document.getElementById('newPass').value=''}else toast(d.erro);loadUsers()}
+  if(!u||!p){toast('Preencha tudo');return}const d=await (await fetch('/api/auth/users',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,senha:p,admin:a})})).json();
+  if(d.ok){toast('Criado');document.getElementById('newUser').value='';document.getElementById('newPass').value=''}else toast(d.erro);loadUsers()}
 async function trocarSenha(u){const s=prompt('Nova senha para '+u+':');if(!s)return;await fetch('/api/auth/trocar-senha',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,nova_senha:s})});toast('Senha alterada')}
-async function deletarUser(u){if(!confirm('Deletar '+u+'?'))return;await fetch('/api/auth/users/'+u,{method:'DELETE'});toast('Deletado');loadUsers()}
+async function deletarUser(u){if(!confirm('Deletar '+u+'?'))return;await fetch('/api/auth/users/'+encodeURIComponent(u),{method:'DELETE'});toast('Deletado');loadUsers()}
 
 async function loadApiKey(){try{const r=await fetch('/api/auth/api-key');if(r.status!==200)return;const d=await r.json();
-    const base=d.base_url||`${location.origin}/v1`,key=d.api_key,modelo=d.model||'';
-    document.getElementById('apiKeyInfo').innerHTML=`
-        <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-            <code style="flex:1;user-select:all">${key}</code>
-            <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${key}');this.textContent='Copiado'">Copiar</button>
-        </div>
-        <p style="margin-top:.375rem;font-size:.75rem">User: ${d.username} · Modelo: ${modelo||'—'}</p>`;
-    document.getElementById('connectInfo').innerHTML=`
-        <div class="code-box" style="margin-bottom:.75rem">
-            <table><tr><td style="color:var(--muted-fg);width:5rem">Base URL</td><td><code style="user-select:all">${base}</code></td></tr>
-            <tr><td style="color:var(--muted-fg)">API Key</td><td><code style="user-select:all">${key}</code></td></tr>
-            ${modelo?`<tr><td style="color:var(--muted-fg)">Model</td><td><code style="user-select:all">${modelo}</code></td></tr>`:''}</table>
-        </div>
-        <details open><summary><i data-lucide="terminal" style="width:14px;height:14px"></i> Hermes CLI</summary><div class="detail-content">
-            <pre><code>model:\n  default: ${modelo||'*'}\n  provider: custom\n  base_url: ${base}\n  api_key: ${key}</code></pre></div></details>
-        <details><summary><i data-lucide="terminal" style="width:14px;height:14px"></i> Terminal</summary><div class="detail-content">
-            <pre><code>export OPENAI_API_BASE=${base}\nexport OPENAI_API_KEY=${key}</code></pre></div></details>
-        <details><summary><i data-lucide="code" style="width:14px;height:14px"></i> Continue.dev</summary><div class="detail-content">
-            <pre><code>{\n  "models": [{"title":"Tambaqui","provider":"openai","model":"${modelo||'*'}","apiBase":"${base}","apiKey":"${key}"}]\n}</code></pre></div></details>
-        <details><summary><i data-lucide="terminal" style="width:14px;height:14px"></i> Aider</summary><div class="detail-content">
-            <pre><code>aider --openai-api-base ${base} --openai-api-key ${key} --model openai/${modelo||'*'}</code></pre></div></details>
-        <details><summary><i data-lucide="code" style="width:14px;height:14px"></i> curl</summary><div class="detail-content">
-            <pre><code>curl ${base}/chat/completions \\\n  -H "Authorization: Bearer ${key}" \\\n  -d '{"model":"${modelo||'*'}","messages":[{"role":"user","content":"oi"}]}'</code></pre></div></details>
-        <details><summary><i data-lucide="code" style="width:14px;height:14px"></i> Python</summary><div class="detail-content">
-            <pre><code>from openai import OpenAI\nclient = OpenAI(base_url="${base}", api_key="${key}")\nresp = client.chat.completions.create(model="${modelo||'*'}", messages=[{"role":"user","content":"ola"}])\nprint(resp.choices[0].message.content)</code></pre></div></details>`;
-    lucide.createIcons()}catch(e){}}
+  const base=d.base_url||`${location.origin}/v1`,key=d.api_key,modelo=d.model||'';
+  document.getElementById('apiKeyInfo').innerHTML=`
+    <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+      <code style="flex:1;user-select:all;word-break:break-all">${esc(key)}</code>
+      <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${esc(key)}');this.innerHTML='Copiado ✓'">Copiar</button></div>
+    <p style="margin-top:.4rem;font-size:.75rem">User: ${esc(d.username)} · Modelo: ${esc(modelo)||'—'}</p>`;
+  document.getElementById('connectInfo').innerHTML=`
+    <div class="code-box" style="margin-bottom:.75rem">
+      <table><tr><td style="color:var(--muted-fg);width:5rem">Base URL</td><td><code style="user-select:all">${esc(base)}</code></td></tr>
+      <tr><td style="color:var(--muted-fg)">API Key</td><td><code style="user-select:all">${esc(key)}</code></td></tr>
+      ${modelo?`<tr><td style="color:var(--muted-fg)">Model</td><td><code style="user-select:all">${esc(modelo)}</code></td></tr>`:''}</table></div>
+    <details open><summary><i data-lucide="terminal" style="width:14px;height:14px"></i> Terminal</summary><div class="detail-content">
+      <pre><code>export OPENAI_API_BASE=${esc(base)}\nexport OPENAI_API_KEY=${esc(key)}</code></pre></div></details>
+    <details><summary><i data-lucide="code" style="width:14px;height:14px"></i> Continue.dev</summary><div class="detail-content">
+      <pre><code>{\n  "models": [{"title":"Tambaqui","provider":"openai","model":"${esc(modelo)||'*'}","apiBase":"${esc(base)}","apiKey":"${esc(key)}"}]\n}</code></pre></div></details>
+    <details><summary><i data-lucide="terminal" style="width:14px;height:14px"></i> Aider</summary><div class="detail-content">
+      <pre><code>aider --openai-api-base ${esc(base)} --openai-api-key ${esc(key)} --model openai/${esc(modelo)||'*'}</code></pre></div></details>
+    <details><summary><i data-lucide="code" style="width:14px;height:14px"></i> curl</summary><div class="detail-content">
+      <pre><code>curl ${esc(base)}/chat/completions \\\n  -H "Authorization: Bearer ${esc(key)}" \\\n  -d '{"model":"${esc(modelo)||'*'}","messages":[{"role":"user","content":"oi"}]}'</code></pre></div></details>
+    <details><summary><i data-lucide="code" style="width:14px;height:14px"></i> Python</summary><div class="detail-content">
+      <pre><code>from openai import OpenAI\nclient = OpenAI(base_url="${esc(base)}", api_key="${esc(key)}")\nr = client.chat.completions.create(model="${esc(modelo)||'*'}", messages=[{"role":"user","content":"ola"}])\nprint(r.choices[0].message.content)</code></pre></div></details>`;
+  lucide.createIcons()}catch(e){}}
 async function regenKey(){if(!confirm('Regenerar? A key anterior para de funcionar.'))return;await fetch('/api/auth/api-key/regenerar',{method:'POST'});toast('Key regenerada');loadApiKey()}
 
-async function loadLogs(){
-    try{const r=await fetch('/api/logs?limit=50');const d=await r.json();
-    const el=document.getElementById('apiLogs');
-    if(!d.logs||!d.logs.length){el.innerHTML='<span style="color:var(--muted-fg)">Nenhum log ainda</span>';return}
-    el.innerHTML=d.logs.reverse().map(l=>{
-        const t=l.timestamp?l.timestamp.split('T')[1]?.split('.')[0]||'':'';
-        const cor=l.tipo==='request'?'var(--blue)':l.tipo==='response'?'var(--green)':'var(--muted-fg)';
-        const parts=Object.entries(l).filter(([k])=>k!=='timestamp'&&k!=='tipo').map(([k,v])=>`<span style="color:var(--muted-fg)">${k}=</span>${String(v).substring(0,80)}`).join(' ');
-        return`<div style="padding:2px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted-fg)">${t}</span> <span style="color:${cor};font-weight:600">${l.tipo}</span> ${parts}</div>`
-    }).join('')}catch(e){}}
+async function loadLogs(){try{const d=await (await fetch('/api/logs?limit=60')).json();const el=document.getElementById('apiLogs');
+  if(!d.logs||!d.logs.length){el.innerHTML='<span class="empty">Nenhum log ainda</span>';return}
+  el.innerHTML=d.logs.reverse().map(l=>{const t=l.timestamp&&l.timestamp.split('T')[1]?l.timestamp.split('T')[1].split('.')[0]:'';
+    const cor=l.tipo==='request'?'var(--blue)':l.tipo==='response'?'var(--green)':'var(--muted-fg)';
+    const parts=Object.entries(l).filter(([k])=>k!=='timestamp'&&k!=='tipo').map(([k,v])=>`<span style="color:var(--muted-fg)">${k}=</span>${esc(String(v).substring(0,80))}`).join(' ');
+    return`<div style="padding:3px 0;border-bottom:1px solid var(--border)"><span style="color:var(--muted-fg)">${t}</span> <span style="color:${cor};font-weight:700">${l.tipo}</span> ${parts}</div>`}).join('')}catch(e){}}
 
-load();loadUsers();loadApiKey();loadDevices();loadLoadMode();loadIdle();loadModo();loadLogs();
-setInterval(()=>{load();loadLogs()},2000);
+load();loadUsers();loadApiKey();loadDevices();loadLoadMode();loadIdle();loadModo();loadTrust();loadLogs();
+setInterval(()=>{load();loadLogs()},2500);
 </script>
 </body></html>

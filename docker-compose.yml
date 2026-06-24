@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   tambaqui:
-    image: ghcr.io/koalitos/tambaqui:latest
+    image: ghcr.io/koalitos/tambaqui:latest   # CPU. Para GPU NVIDIA: docker compose -f docker-compose.gpu.yml up -d
     # Ou build local: build: .
     container_name: tambaqui
     ports:

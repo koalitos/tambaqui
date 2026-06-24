@@ -22,11 +22,11 @@ import hashlib
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
-from typing import List, Optional, Generator
+from typing import List, Optional, Generator, Union
 
 import requests
 from bs4 import BeautifulSoup
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 try:
     import psutil
@@ -35,6 +35,7 @@ except ImportError:
     HAS_PSUTIL = False
 
 import secrets
+import sqlite3
 
 import logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S")
@@ -157,8 +158,23 @@ SYSTEM_PROMPT = (
     "Tambaqui: 'Manda a mensagem de erro completa e o trecho do código pra eu ver o que está acontecendo.'\n"
 )
 
-def _get_system_prompt() -> str:
-    """Retorna system prompt."""
+# Prompt enxuto pra modelos pequenos (<=3.5B): prompt longo faz eles perderem aderência e ecoarem.
+SYSTEM_PROMPT_CURTO = (
+    "Você é o Tambaqui, uma IA brasileira especialista em programação. "
+    "Responda SEMPRE em português brasileiro, de forma direta e objetiva. "
+    "Todo código vai em bloco markdown com a linguagem declarada (```python, ```js, ```sql, ...). "
+    "Gere código completo e funcional, com os imports necessários — nada de '...'. "
+    "Cumprimento ou papo casual (oi, boa tarde, valeu): responda em UMA linha, SEM código. "
+    "Pergunta conceitual: explique curto, com um exemplo. "
+    "Nunca invente funções, bibliotecas ou parâmetros que não existem; se não tiver certeza, diga."
+)
+
+
+def _get_system_prompt(n_params: float = None) -> str:
+    """Prompt curto pra modelos pequenos (<=3.5B); completo pros maiores.
+    n_params = nº real de parâmetros do modelo ativo (use manager.n_params)."""
+    if n_params and n_params <= 3.5e9:
+        return SYSTEM_PROMPT_CURTO
     return SYSTEM_PROMPT
 
 HTTP_HEADERS = {"User-Agent": "Tambaqui/2.0"}
@@ -197,6 +213,56 @@ CATALOGO = {
 
 
 # ============================================================
+# HELPERS DE MODELO (HUB / DOWNLOAD)
+# ============================================================
+
+
+def _estimar_tamanho_nome(mid: str) -> str:
+    """Extrai o nº de params do nome do modelo (ex.: '...-7B-...' -> '7B'). Heurística."""
+    m = re.search(r"(\d+(?:\.\d+)?)\s*[bB](?![a-zA-Z])", mid.replace("-", " ").replace("_", " "))
+    return f"{m.group(1)}B" if m else ""
+
+
+def _params_do_nome(s: str) -> float:
+    """Nº de params (float) a partir do nome (ex.: 'Qwen2.5-Coder-7B' -> 7e9). 0 se desconhecido."""
+    m = re.search(r"(\d+(?:\.\d+)?)\s*[bB](?![a-zA-Z])", (s or "").replace("-", " ").replace("_", " "))
+    return float(m.group(1)) * 1e9 if m else 0
+
+
+def _eh_repo_gguf(mid: str) -> bool:
+    return "gguf" in (mid or "").lower()
+
+
+# Formatos de outros frameworks (TF/Flax/ONNX) e GGUF — não baixar no caminho transformers.
+_FORMATOS_IGNORADOS = (".onnx", ".onnx_data", ".msgpack", ".h5", ".tflite", ".ot", ".gguf")
+
+
+def _arquivo_desnecessario(fname: str) -> bool:
+    return fname.lower().endswith(_FORMATOS_IGNORADOS)
+
+
+def _repo_eh_geracao_texto(info) -> bool:
+    """Heurística: o repo é um modelo de geração de texto carregável por AutoModelForCausalLM?"""
+    pt = getattr(info, "pipeline_tag", None)
+    try:
+        arch = (getattr(info, "config", None) or {}).get("architectures", []) or []
+    except Exception:
+        arch = []
+    a = " ".join(arch)
+    if any(k in a for k in ("CausalLM", "ForConditionalGeneration", "LMHeadModel")):
+        return True
+    if pt in ("text-generation", "text2text-generation"):
+        return True
+    # Bloqueia só quando há um pipeline_tag EXPLÍCITO de outra modalidade (imagem, áudio, etc.).
+    OUTRAS = {"text-to-image", "image-to-text", "automatic-speech-recognition", "text-to-speech",
+              "image-classification", "object-detection", "feature-extraction", "sentence-similarity",
+              "fill-mask", "token-classification", "text-classification", "translation", "summarization"}
+    if pt in OUTRAS:
+        return False
+    return True  # metadados ausentes: permitir (não bloquear modelo legítimo sem pipeline_tag)
+
+
+# ============================================================
 # SISTEMA
 # ============================================================
 
@@ -218,7 +284,7 @@ def get_system_info() -> dict:
         if torch.cuda.is_available():
             for i in range(torch.cuda.device_count()):
                 props = torch.cuda.get_device_properties(i)
-                total = props.total_mem
+                total = props.total_memory
                 usado = torch.cuda.memory_allocated(i)
                 reservado = torch.cuda.memory_reserved(i)
                 info["gpus"].append({
@@ -250,7 +316,49 @@ def get_system_info() -> dict:
 # ============================================================
 
 USERS_FILE = DADOS_DIR / "users.json"
-TOKENS: dict = {}  # token -> username (sessões ativas)
+DB_FILE = DADOS_DIR / "tambaqui.db"
+
+
+class TokenStore:
+    """Tokens de login em SQLite — sobrevivem a restart e a múltiplos workers (antes era dict em RAM)."""
+
+    def __init__(self, path):
+        self.path = str(path)
+        self._lock = threading.Lock()
+        self._exec("CREATE TABLE IF NOT EXISTS tokens (token TEXT PRIMARY KEY, username TEXT, expires REAL)")
+
+    def _exec(self, sql, params=(), fetch=False):
+        with self._lock:
+            c = sqlite3.connect(self.path, check_same_thread=False)
+            try:
+                cur = c.execute(sql, params)
+                row = cur.fetchone() if fetch else None
+                c.commit()
+                return row
+            finally:
+                c.close()
+
+    def add(self, token: str, username: str, ttl: int = 86400 * 7):
+        self._exec("INSERT OR REPLACE INTO tokens VALUES (?,?,?)", (token, username, time.time() + ttl))
+
+    def get(self, token: str):
+        row = self._exec("SELECT username, expires FROM tokens WHERE token=?", (token,), fetch=True)
+        if not row:
+            return None
+        username, expires = row
+        if expires and expires < time.time():
+            self.delete(token)
+            return None
+        return username
+
+    def delete(self, token: str):
+        self._exec("DELETE FROM tokens WHERE token=?", (token,))
+
+    def delete_user(self, username: str):
+        self._exec("DELETE FROM tokens WHERE username=?", (username,))
+
+
+_tokens = TokenStore(DB_FILE)
 
 
 def _carregar_users() -> dict:
@@ -292,13 +400,13 @@ def user_login(username: str, senha: str) -> Optional[str]:
     if not user or user["senha_hash"] != _hash_senha(senha):
         return None
     token = secrets.token_hex(32)
-    TOKENS[token] = username
+    _tokens.add(token, username)
     return token
 
 
 def user_validar(token: str) -> Optional[dict]:
     # Sessão de login
-    username = TOKENS.get(token)
+    username = _tokens.get(token)
     if username:
         users = _carregar_users()
         user = users.get(username)
@@ -359,10 +467,7 @@ def user_deletar(username: str) -> dict:
         return {"erro": "User não encontrado"}
     del users[username]
     _salvar_users(users)
-    # Revogar tokens
-    for tok, uname in list(TOKENS.items()):
-        if uname == username:
-            del TOKENS[tok]
+    _tokens.delete_user(username)  # revoga sessões do user deletado
     return {"ok": True}
 
 
@@ -419,7 +524,11 @@ class ModelManager:
         self.carregando = False
         self.progresso_download = {}
         self.warmup_done = False
-        self._lock = threading.Lock()
+        self.n_params = 0            # nº real de parâmetros do modelo carregado
+        self._sanitizer = None       # LogitsProcessorList anti-NaN (singleton, criado 1x)
+        self.backend = "transformers"  # "transformers" (safetensors) ou "llama" (GGUF/llama.cpp)
+        self.llama = None            # instância llama_cpp.Llama quando backend == "llama"
+        self._lock = threading.Lock()  # serializa generate() — modelo único não é thread-safe
 
         # Carregar config salva
         cfg = _carregar_config()
@@ -428,13 +537,15 @@ class ModelManager:
     def detectar_devices(self) -> list:
         """Lista devices disponíveis na máquina."""
         devices = [{"id": "cpu", "nome": "CPU", "disponivel": True, "info": f"{os.cpu_count()} cores"}]
+        cuda_found = False
 
         try:
             import torch
             if torch.cuda.is_available():
                 for i in range(torch.cuda.device_count()):
                     props = torch.cuda.get_device_properties(i)
-                    mem_gb = round(props.total_mem / (1024**3), 1)
+                    mem_gb = round(props.total_memory / (1024**3), 1)
+                    cuda_found = True
                     devices.append({
                         "id": f"cuda:{i}" if i > 0 else "cuda",
                         "nome": f"GPU NVIDIA: {props.name}",
@@ -445,6 +556,30 @@ class ModelManager:
                 devices.append({"id": "mps", "nome": "GPU Apple (MPS)", "disponivel": True, "info": "Metal"})
         except Exception:
             pass
+
+        # Fallback: detectar GPU NVIDIA via nvidia-smi quando o torch foi instalado sem CUDA.
+        # Mostra a placa pro usuário com aviso de que precisa da imagem com CUDA (:cuda).
+        if not cuda_found:
+            try:
+                result = subprocess.run(
+                    ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
+                    capture_output=True, text=True, timeout=3,
+                )
+                if result.returncode == 0:
+                    for i, line in enumerate(result.stdout.strip().splitlines()):
+                        if not line.strip():
+                            continue
+                        parts = line.split(",")
+                        nome = parts[0].strip()
+                        mem_gb = round(int(parts[1].strip()) / 1024, 1) if len(parts) > 1 else 0
+                        devices.append({
+                            "id": f"cuda:{i}" if i > 0 else "cuda",
+                            "nome": f"GPU NVIDIA: {nome}",
+                            "disponivel": False,
+                            "info": f"{mem_gb} GB VRAM — torch sem CUDA (use a imagem :cuda)",
+                        })
+            except Exception:
+                pass
 
         devices.insert(0, {"id": "auto", "nome": "Automático", "disponivel": True, "info": "Detecta o melhor"})
         return devices
@@ -500,18 +635,100 @@ class ModelManager:
         _salvar_config(cfg)
         return {"ok": True, "mode": mode}
 
+    def get_trust_remote_code(self) -> bool:
+        """trust_remote_code: default OFF (segurança). Necessário p/ alguns modelos com código próprio."""
+        return bool(_carregar_config().get("trust_remote_code", False))
+
+    def set_trust_remote_code(self, val: bool) -> dict:
+        cfg = _carregar_config()
+        cfg["trust_remote_code"] = bool(val)
+        _salvar_config(cfg)
+        return {"ok": True, "trust_remote_code": bool(val)}
+
+    # --- Busca no HuggingFace Hub ---
+
+    def buscar_hub(self, query: str, limit: int = 20) -> list:
+        """Busca modelos de geração de texto no HuggingFace Hub (ordenados por downloads)."""
+        try:
+            from huggingface_hub import HfApi
+            api = HfApi()
+            locais = {m["nome"] for m in self.listar_locais()}
+            resultados = []
+            for m in api.list_models(search=query or "", filter="text-generation",
+                                     sort="downloads", direction=-1, limit=limit):
+                mid = m.id
+                resultados.append({
+                    "id": mid,
+                    "downloads": getattr(m, "downloads", 0) or 0,
+                    "likes": getattr(m, "likes", 0) or 0,
+                    "gated": bool(getattr(m, "gated", False)),
+                    "tamanho_hint": _estimar_tamanho_nome(mid),
+                    "baixado": mid.split("/")[-1].lower() in locais,
+                    "baixando": mid.split("/")[-1].lower() in self.progresso_download,
+                })
+            return resultados
+        except Exception as e:
+            logger.error(f"Erro na busca HF: {e}")
+            return []
+
+    def listar_gguf_repo(self, repo: str) -> list:
+        """Lista os arquivos .gguf (quantizações) de um repo GGUF, do menor pro maior."""
+        try:
+            from huggingface_hub import HfApi
+            info = HfApi().model_info(repo, files_metadata=True)
+            files = [{"arquivo": s.rfilename, "tamanho_gb": round((s.size or 0) / (1024**3), 2)}
+                     for s in info.siblings if s.rfilename.lower().endswith(".gguf")]
+            files.sort(key=lambda x: x["tamanho_gb"])
+            return files
+        except Exception as e:
+            logger.error(f"Erro listar gguf {repo}: {e}")
+            return []
+
+    def baixar_gguf(self, repo: str, filename: str) -> dict:
+        """Baixa UM arquivo .gguf (uma quantização) — não o repo inteiro."""
+        nome = repo.split("/")[-1].lower()
+        if nome in self.progresso_download:
+            return {"status": "Já está baixando..."}
+        self.progresso_download[nome] = {"status": "iniciando", "percent": 1, "arquivo": filename, "velocidade": ""}
+
+        def _dl():
+            try:
+                from huggingface_hub import hf_hub_download
+                destino = MODELOS_DIR / nome
+                destino.mkdir(parents=True, exist_ok=True)
+                self.progresso_download[nome] = {"status": "baixando", "percent": 5, "arquivo": filename, "velocidade": "1 arquivo"}
+                hf_hub_download(repo, filename, local_dir=str(destino))
+                self.progresso_download[nome] = {"status": "concluído", "percent": 100, "arquivo": "", "velocidade": ""}
+                logger.info(f"✅ GGUF baixado: {nome}/{filename}")
+                time.sleep(3)
+                del self.progresso_download[nome]
+            except Exception as e:
+                self.progresso_download[nome] = {"status": f"erro: {e}", "percent": -1, "arquivo": "", "velocidade": ""}
+                logger.error(f"Erro ao baixar GGUF {repo}/{filename}: {e}")
+
+        threading.Thread(target=_dl, daemon=True).start()
+        return {"status": "Download iniciado", "nome": nome}
+
     # --- Descoberta ---
 
     def listar_locais(self) -> list:
-        """Lista modelos já baixados."""
+        """Lista modelos já baixados (HF safetensors e GGUF/llama.cpp)."""
         modelos = []
         for d in sorted(MODELOS_DIR.iterdir()):
+            # GGUF avulso (um arquivo .gguf solto na pasta modelos/)
+            if d.is_file() and d.suffix.lower() == ".gguf":
+                modelos.append({
+                    "nome": d.name, "tamanho_gb": round(d.stat().st_size / (1024**3), 1),
+                    "ativo": d.name == self.modelo_ativo, "path": str(d), "formato": "gguf",
+                })
+                continue
             if not d.is_dir():
                 continue
             # Detectar formato
+            has_gguf = any(d.glob("*.gguf"))
             has_safetensors = any(d.glob("*.safetensors"))
             has_config = (d / "config.json").exists()
-            if not (has_safetensors or has_config):
+            if not (has_safetensors or has_config or has_gguf):
                 continue
             tamanho = sum(f.stat().st_size for f in d.rglob("*") if f.is_file()) / (1024**3)
             modelos.append({
@@ -519,8 +736,20 @@ class ModelManager:
                 "tamanho_gb": round(tamanho, 1),
                 "ativo": d.name == self.modelo_ativo,
                 "path": str(d),
+                "formato": "gguf" if has_gguf else "hf",
             })
         return modelos
+
+    def _achar_gguf(self, nome: str):
+        """Retorna o Path do arquivo .gguf de um modelo (avulso ou dentro da pasta), ou None."""
+        p = MODELOS_DIR / nome
+        if p.is_file() and p.suffix.lower() == ".gguf":
+            return p
+        if p.is_dir():
+            ggufs = sorted(p.glob("*.gguf"))
+            if ggufs:
+                return ggufs[0]
+        return None
 
     def listar_catalogo(self) -> list:
         """Lista modelos disponíveis para download."""
@@ -545,6 +774,7 @@ class ModelManager:
         if nome in self.progresso_download:
             return {"status": "Já está baixando..."}
 
+        from_catalog = nome in CATALOGO
         if nome in CATALOGO:
             repo = CATALOGO[nome]["repo"]
             destino = MODELOS_DIR / nome
@@ -566,15 +796,19 @@ class ModelManager:
                 # Listar arquivos do repo
                 self.progresso_download[nome] = {"status": "listando arquivos", "percent": 1, "arquivo": "", "velocidade": ""}
                 files = api.list_repo_files(repo)
+                # Pular formatos de outros frameworks (TF/Flax/ONNX/GGUF) — economiza disco e banda.
+                files = [f for f in files if not _arquivo_desnecessario(f)]
                 total_files = len(files)
                 destino.mkdir(parents=True, exist_ok=True)
 
-                # Calcular tamanho total (se possível)
+                # Calcular tamanho total (se possível) + validar arquitetura de repos arbitrários
                 info = api.model_info(repo)
+                if not from_catalog and not _repo_eh_geracao_texto(info):
+                    raise ValueError("Repo não parece um modelo de geração de texto (text-generation).")
                 total_bytes = 0
                 file_sizes = {}
                 for s in info.siblings:
-                    if s.size:
+                    if s.size and not _arquivo_desnecessario(s.rfilename):
                         file_sizes[s.rfilename] = s.size
                         total_bytes += s.size
 
@@ -649,12 +883,24 @@ class ModelManager:
         logger.info(f"🧠 Pre-carregando: {nome}...")
 
         try:
+            # GGUF -> engine llama.cpp (quantizado, roda em CPU fraca, GPU offload por camadas).
+            # Demais formatos -> transformers.
+            gguf_path = self._achar_gguf(nome)
+            if gguf_path is not None:
+                return self._carregar_gguf(nome, gguf_path)
+            self.backend = "transformers"
+            self.llama = None
+
             import torch
             from transformers import AutoModelForCausalLM, AutoTokenizer
 
+            # trust_remote_code é opt-in (default OFF): executar código arbitrário do repo é um
+            # vetor de RCE num servidor com login. Ligue em /admin só pra modelos confiáveis.
+            trc = self.get_trust_remote_code()
+
             # Carregar tokenizer
             self.tokenizer = AutoTokenizer.from_pretrained(
-                str(pasta), trust_remote_code=True,
+                str(pasta), trust_remote_code=trc,
             )
             if not self.tokenizer.pad_token:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
@@ -671,7 +917,7 @@ class ModelManager:
                 device = "cpu"
                 dtype = torch.float16  # float16 em CPU funciona e usa metade da RAM
                 if torch.cuda.is_available():
-                    gpu_mem = torch.cuda.get_device_properties(0).total_mem / (1024**3)
+                    gpu_mem = torch.cuda.get_device_properties(0).total_memory / (1024**3)
                     if modelo_gb * 1.2 < gpu_mem:
                         device = "cuda"
                 elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
@@ -694,7 +940,7 @@ class ModelManager:
             # Carregar modelo
             load_kwargs = {
                 "dtype": dtype,
-                "trust_remote_code": True,
+                "trust_remote_code": trc,
                 "low_cpu_mem_usage": True,
             }
 
@@ -714,7 +960,7 @@ class ModelManager:
                 device = "cpu"
                 dtype = torch.float16
                 self.device_nome = device
-                load_kwargs = {"dtype": dtype, "trust_remote_code": True, "low_cpu_mem_usage": True}
+                load_kwargs = {"dtype": dtype, "trust_remote_code": trc, "low_cpu_mem_usage": True}
                 self.model = AutoModelForCausalLM.from_pretrained(str(pasta), **load_kwargs)
 
             if not hasattr(self.model, "hf_device_map"):
@@ -723,20 +969,23 @@ class ModelManager:
 
             # --- Otimizações de performance ---
 
-            # 1. BetterTransformer / SDPA (Flash Attention se disponível)
+            # 1. Atenção acelerada: transformers usa SDPA (PyTorch 2.x) por padrão quando o modelo
+            # suporta. Não usamos mais to_bettertransformer() (deprecated/removido); só logamos o ativo.
             try:
-                self.model = self.model.to_bettertransformer()
-                logger.info("  ⚡ BetterTransformer ativado")
+                attn = getattr(self.model.config, "_attn_implementation", "eager")
+                logger.info(f"  ⚡ Atenção: {attn}")
             except Exception:
                 pass
 
-            # 2. torch.compile (PyTorch 2.0+ - JIT compile, ~2x mais rápido)
+            # 2. torch.compile — só em CUDA (reduce-overhead usa CUDA graphs).
+            # Em CPU/MPS o ganho é nulo/negativo e a compilação custa caro (recompila por shape);
+            # desativado de propósito. O caminho de perf em CPU é quantização/GGUF (ver Onda 4).
             try:
-                if hasattr(torch, "compile") and device != "mps":
+                if hasattr(torch, "compile") and device.startswith("cuda"):
                     self.model = torch.compile(self.model, mode="reduce-overhead")
-                    logger.info("  ⚡ torch.compile ativado")
-            except Exception:
-                pass
+                    logger.info("  ⚡ torch.compile ativado (reduce-overhead)")
+            except Exception as e:
+                logger.warning(f"  torch.compile falhou (não crítico): {e}")
 
             # 3. KV cache e padding side
             self.tokenizer.padding_side = "left"
@@ -747,6 +996,7 @@ class ModelManager:
             cfg["ultimo_modelo"] = nome
             _salvar_config(cfg)
             n_params = sum(p.numel() for p in self.model.parameters())
+            self.n_params = n_params
             logger.info(f"✅ Modelo pronto: {nome} ({n_params/1e9:.1f}B params, {device})")
 
             # Warmup - gerar tokens dummy pra aquecer caches + compilar
@@ -761,6 +1011,80 @@ class ModelManager:
             return {"erro": str(e)}
         finally:
             self.carregando = False
+
+    def _carregar_gguf(self, nome: str, gguf_path) -> dict:
+        """Carrega um modelo GGUF via llama-cpp-python (quantizado)."""
+        try:
+            from llama_cpp import Llama
+        except ImportError:
+            return {"erro": "GGUF precisa de llama-cpp-python. Instale: pip install llama-cpp-python"}
+
+        # Libera o modelo transformers anterior (se houver)
+        self.model = None
+        self.tokenizer = None
+
+        # GPU offload (Metal/CUDA) se o build do llama.cpp suportar e o device pedir
+        dev = self.device_atual
+        try:
+            import torch
+            gpu = (dev.startswith("cuda") or dev == "mps" or
+                   (dev == "auto" and (torch.cuda.is_available() or
+                    (hasattr(torch.backends, "mps") and torch.backends.mps.is_available()))))
+        except Exception:
+            gpu = dev in ("cuda", "mps")
+        n_gpu_layers = -1 if gpu else 0  # -1 = todas as camadas na GPU
+
+        logger.info(f"🧠 Carregando GGUF: {gguf_path.name} (n_gpu_layers={n_gpu_layers})...")
+        self.llama = Llama(model_path=str(gguf_path), n_ctx=4096,
+                           n_threads=os.cpu_count() or 4, n_gpu_layers=n_gpu_layers,
+                           embedding=True, verbose=False)
+        self.backend = "llama"
+        self.device_nome = "gpu (llama.cpp)" if n_gpu_layers else "cpu (llama.cpp)"
+        self.modelo_ativo = nome
+        self.n_params = _params_do_nome(gguf_path.name) or _params_do_nome(nome)
+        self.warmup_done = True
+        cfg = _carregar_config(); cfg["ultimo_modelo"] = nome; _salvar_config(cfg)
+        logger.info(f"✅ GGUF pronto: {nome} ({self.device_nome})")
+        return {"ok": True, "nome": nome, "backend": "llama", "device": self.device_nome}
+
+    def _llama_completo(self, messages, max_tokens, temperature, top_p, stop=None):
+        temperature = 0.0 if self._modelo_pequeno() else self._ajustar_temperatura(temperature)
+        kw = dict(messages=messages, max_tokens=max_tokens, temperature=temperature, top_p=top_p)
+        if stop:
+            kw["stop"] = stop if isinstance(stop, list) else [stop]
+        try:
+            out = self.llama.create_chat_completion(**kw)
+            return (out["choices"][0]["message"].get("content") or "").strip() or None
+        except Exception as e:
+            logger.error(f"Erro GGUF: {e}")
+            return None
+
+    def _llama_stream(self, messages, max_tokens, temperature, top_p, stop=None):
+        temperature = 0.0 if self._modelo_pequeno() else self._ajustar_temperatura(temperature)
+        kw = dict(messages=messages, max_tokens=max_tokens, temperature=temperature, top_p=top_p, stream=True)
+        if stop:
+            kw["stop"] = stop if isinstance(stop, list) else [stop]
+        try:
+            for ch in self.llama.create_chat_completion(**kw):
+                delta = ch["choices"][0].get("delta", {}).get("content")
+                if delta:
+                    yield delta
+        except Exception as e:
+            logger.error(f"Erro GGUF stream: {e}")
+            yield f"\n[Erro: {e}]"
+
+    def embeddings(self, textos):
+        """Gera embeddings (só no backend GGUF/llama.cpp, carregado com embedding=True)."""
+        if self.backend != "llama" or not self.llama:
+            return None
+        if isinstance(textos, str):
+            textos = [textos]
+        try:
+            res = self.llama.create_embedding(textos)
+            return [d["embedding"] for d in res["data"]]
+        except Exception as e:
+            logger.error(f"Erro embeddings: {e}")
+            return None
 
     def _warmup(self):
         """Aquece o modelo - compila caches, CUDA graphs, etc."""
@@ -785,6 +1109,8 @@ class ModelManager:
         """Libera modelo da RAM."""
         self.model = None
         self.tokenizer = None
+        self.llama = None
+        self.backend = "transformers"
         self.modelo_ativo = None
         self.warmup_done = False
         import gc
@@ -836,7 +1162,7 @@ class ModelManager:
 
     def _auto_carregar(self):
         """Carrega modelo automaticamente (modo ondemand)."""
-        if self.model:
+        if self.pronto():
             return True
         locais = self.listar_locais()
         if not locais:
@@ -846,27 +1172,29 @@ class ModelManager:
         nome = self.modelo_ativo or cfg.get("ultimo_modelo") or locais[0]["nome"]
         logger.info(f"🔄 Sob demanda - carregando {nome}...")
         self.carregar(nome)
-        return self.model is not None
+        return self.pronto()
 
-    def gerar(self, messages: list, max_tokens: int = 2048, temperature: float = 0.7,
-              top_p: float = 0.9, stream: bool = False) -> any:
-        """Gera resposta. Se stream=True, retorna generator."""
+    def gerar(self, messages: list, max_tokens: int = 1024, temperature: float = 0.7,
+              top_p: float = 0.9, stream: bool = False, stop: list = None) -> any:
+        """Gera resposta. Se stream=True, retorna generator. `stop` = sequências de parada do cliente."""
         mode = self.get_load_mode()
 
         # Sob demanda: carregar antes de gerar
-        if mode == "ondemand" and not self.model:
+        if mode == "ondemand" and not self.pronto():
             if not self._auto_carregar():
                 return None
 
-        if not self.model or not self.tokenizer:
+        if not self.pronto():
             return None
 
         self._resetar_idle_timer()
 
         if stream:
-            return self._gerar_stream_wrapper(messages, max_tokens, temperature, top_p, mode)
+            return self._gerar_stream_wrapper(messages, max_tokens, temperature, top_p, mode, stop)
         else:
-            resultado = self._gerar_completo(messages, max_tokens, temperature, top_p)
+            # Lock: o modelo é único e generate() não é thread-safe — serializa requests concorrentes.
+            with self._lock:
+                resultado = self._gerar_completo(messages, max_tokens, temperature, top_p, stop)
             self._limpar_cache()
             # Sob demanda: descarregar depois de responder
             if mode == "ondemand":
@@ -874,27 +1202,57 @@ class ModelManager:
                 self.descarregar()
             return resultado
 
-    def _gerar_stream_wrapper(self, messages, max_tokens, temperature, top_p, mode=None):
-        """Wrapper do stream que limpa cache e descarrega se ondemand."""
-        for chunk in self._gerar_stream(messages, max_tokens, temperature, top_p):
-            yield chunk
+    def _gerar_stream_wrapper(self, messages, max_tokens, temperature, top_p, mode=None, stop=None):
+        """Wrapper do stream que limpa cache e descarrega se ondemand. Segura o lock por toda a geração."""
+        with self._lock:
+            for chunk in self._gerar_stream(messages, max_tokens, temperature, top_p, stop):
+                yield chunk
         self._limpar_cache()
         if mode == "ondemand":
             logger.info("📦 Sob demanda - descarregando modelo")
             self.descarregar()
 
-    def _get_gen_kwargs(self, max_tokens: int, temperature: float, top_p: float) -> dict:
+    def _get_sanitizer(self):
+        """LogitsProcessorList anti-NaN/inf, criado uma única vez (evita recriar por token/request)."""
+        if self._sanitizer is None:
+            import torch
+            from transformers import LogitsProcessorList, LogitsProcessor
+
+            class _Sanitize(LogitsProcessor):
+                def __call__(self, input_ids, scores):
+                    return torch.where(torch.isnan(scores) | torch.isinf(scores),
+                                       torch.full_like(scores, -1e4), scores)
+
+            self._sanitizer = LogitsProcessorList([_Sanitize()])
+        return self._sanitizer
+
+    def _modelo_pequeno(self) -> bool:
+        """True para modelos <=3.5B (decidido pelo nº REAL de params, não pelo nome)."""
+        return bool(self.n_params) and self.n_params <= 3.5e9
+
+    def _get_gen_kwargs(self, max_tokens: int, temperature: float, top_p: float, stop: list = None) -> dict:
         """Kwargs comuns de geração otimizados."""
         kwargs = {
             "max_new_tokens": max_tokens,
-            "pad_token_id": self.tokenizer.eos_token_id,
+            "pad_token_id": self.tokenizer.pad_token_id or self.tokenizer.eos_token_id,
             "use_cache": True,  # KV cache - acelera geração
             "repetition_penalty": 1.1,
+            "logits_processor": self._get_sanitizer(),
         }
-        if temperature > 0:
-            kwargs.update({"do_sample": True, "temperature": temperature, "top_p": top_p})
+        # Modelos pequenos: greedy (do_sample=False) é o anti-alucinação mais eficaz E mais rápido.
+        if temperature > 0 and not self._modelo_pequeno():
+            kwargs.update({
+                "do_sample": True,
+                "temperature": max(temperature, 0.01),
+                "top_p": top_p,
+                "top_k": 40,
+            })
         else:
             kwargs["do_sample"] = False
+        # Respeitar stop sequences do cliente (aider/cline dependem disso). Precisa do tokenizer.
+        if stop:
+            kwargs["stop_strings"] = stop if isinstance(stop, list) else [stop]
+            kwargs["tokenizer"] = self.tokenizer
         return kwargs
 
     def _prepare_inputs(self, messages: list):
@@ -908,12 +1266,9 @@ class ModelManager:
         return inputs, inputs["input_ids"].shape[1]
 
     def _ajustar_temperatura(self, temperature: float) -> float:
-        """Modelos pequenos precisam de temperatura mais baixa pra não alucinar."""
-        if not self.modelo_ativo:
-            return temperature
-        nome = self.modelo_ativo.lower()
-        if any(x in nome for x in ["0.5b", "1.5b", "1b", "3b"]):
-            return min(temperature, 0.3)  # Máx 0.3 pra modelos pequenos
+        """Modelos pequenos: temperatura baixa reduz alucinação (decidido pelo nº REAL de params)."""
+        if self._modelo_pequeno():
+            return min(temperature, 0.3)
         return temperature
 
     def _validar_resposta(self, resposta: str, messages: list) -> str:
@@ -952,37 +1307,43 @@ class ModelManager:
 
         return resposta
 
-    def _gerar_completo(self, messages: list, max_tokens: int, temperature: float, top_p: float) -> Optional[str]:
+    def _gerar_completo(self, messages: list, max_tokens: int, temperature: float, top_p: float, stop: list = None) -> Optional[str]:
+        if self.backend == "llama":
+            return self._llama_completo(messages, max_tokens, temperature, top_p, stop)
         import torch
 
         temperature = self._ajustar_temperatura(temperature)
 
         try:
             inputs, input_len = self._prepare_inputs(messages)
-            gen_kwargs = self._get_gen_kwargs(max_tokens, temperature, top_p)
+            gen_kwargs = self._get_gen_kwargs(max_tokens, temperature, top_p, stop)
 
             with torch.inference_mode():
                 outputs = self.model.generate(**inputs, **gen_kwargs)
 
             resposta = self.tokenizer.decode(outputs[0][input_len:], skip_special_tokens=True)
-            resposta = resposta.strip()
-            if resposta:
-                resposta = self._validar_resposta(resposta, messages)
-            return resposta or None
+            # _validar_resposta (regex destrutivo) removido na Onda 4: corrompia código real.
+            # Anti-alucinação agora vem de greedy + prompt curto + cap de tokens (Onda 1).
+            return resposta.strip() or None
 
         except Exception as e:
             logger.error(f"Erro na geração: {e}")
             return None
 
-    def _gerar_stream(self, messages: list, max_tokens: int, temperature: float, top_p: float) -> Generator:
+    def _gerar_stream(self, messages: list, max_tokens: int, temperature: float, top_p: float, stop: list = None) -> Generator:
         """Gera tokens um a um (streaming)."""
+        if self.backend == "llama":
+            yield from self._llama_stream(messages, max_tokens, temperature, top_p, stop)
+            return
         import torch
         from transformers import TextIteratorStreamer
+
+        temperature = self._ajustar_temperatura(temperature)
 
         try:
             inputs, _ = self._prepare_inputs(messages)
             streamer = TextIteratorStreamer(self.tokenizer, skip_prompt=True, skip_special_tokens=True)
-            gen_kwargs = {**inputs, **self._get_gen_kwargs(max_tokens, temperature, top_p), "streamer": streamer}
+            gen_kwargs = {**inputs, **self._get_gen_kwargs(max_tokens, temperature, top_p, stop), "streamer": streamer}
 
             def _gen():
                 with torch.inference_mode():
@@ -1001,7 +1362,25 @@ class ModelManager:
             logger.error(f"Erro no streaming: {e}")
             yield f"\n[Erro: {e}]"
 
+    def contar_tokens(self, text: str) -> int:
+        """Conta tokens de verdade com o tokenizer/modelo (cai pra estimativa se não houver)."""
+        if not text:
+            return 0
+        if self.backend == "llama" and self.llama:
+            try:
+                return len(self.llama.tokenize(text.encode("utf-8")))
+            except Exception:
+                pass
+        if self.tokenizer:
+            try:
+                return len(self.tokenizer.encode(text))
+            except Exception:
+                pass
+        return len(text) // 4
+
     def pronto(self) -> bool:
+        if self.backend == "llama":
+            return self.llama is not None
         return self.model is not None and self.tokenizer is not None
 
     def status(self) -> dict:
@@ -1010,6 +1389,7 @@ class ModelManager:
             "pronto": self.pronto(),
             "carregando": self.carregando,
             "warmup": self.warmup_done,
+            "backend": self.backend,
             "device_config": self.device_atual,
             "device": self.device_nome,
             "downloads": dict(self.progresso_download),
@@ -1197,24 +1577,101 @@ def buscar_web(query: str) -> dict:
 from fastapi import FastAPI, Request, Response, Cookie
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.concurrency import run_in_threadpool
+from contextlib import asynccontextmanager
 
-app = FastAPI(title="Tambaqui", version="2.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-manager = ModelManager()
-
-# Auto-carregar modelo no startup
-@app.on_event("startup")
-async def startup():
+@asynccontextmanager
+async def lifespan(app):
+    # Startup: decide o carregamento do modelo conforme o modo configurado.
     locais = manager.listar_locais()
     mode = manager.get_load_mode()
     if locais and mode == "preload":
         logger.info(f"🚀 Pre-load ativado. Carregando {locais[0]['nome']}...")
         threading.Thread(target=lambda: manager.carregar(locais[0]["nome"]), daemon=True).start()
     elif locais and mode == "ondemand":
-        logger.info(f"⚡ Modo sob demanda. Modelo carrega quando chegar request.")
+        logger.info("⚡ Modo sob demanda. Modelo carrega quando chegar request.")
     elif locais:
         logger.info(f"📦 {len(locais)} modelo(s). Carregue pelo /admin.")
+    yield
+
+
+app = FastAPI(title="Tambaqui", version="2.0", lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+manager = ModelManager()
+
+# Backpressure: limita a profundidade da fila de geração. O modelo já é serializado pelo _lock;
+# isto evita que requests se acumulem sem limite e devolve 429 quando a fila enche.
+MAX_QUEUE = int(os.environ.get("TAMBAQUI_MAX_QUEUE", "16"))
+
+
+class _Backpressure:
+    def __init__(self, max_queue: int):
+        self.max_queue = max_queue
+        self.inflight = 0
+        self._lock = threading.Lock()
+
+    def try_enter(self) -> bool:
+        with self._lock:
+            if self.inflight >= self.max_queue:
+                return False
+            self.inflight += 1
+            return True
+
+    def leave(self):
+        with self._lock:
+            self.inflight = max(0, self.inflight - 1)
+
+
+_bp = _Backpressure(MAX_QUEUE)
+
+
+def _resp_429():
+    return JSONResponse(
+        status_code=429,
+        content={"error": {"message": "Servidor ocupado (fila cheia). Tente de novo em instantes.",
+                           "type": "rate_limit_error", "code": "queue_full"}},
+        headers={"Retry-After": "5"},
+    )
+
+
+# Rate limiting opcional por API key/IP (requisições/minuto). 0 = desligado.
+RATE_LIMIT = int(os.environ.get("TAMBAQUI_RATE_LIMIT", "0"))
+
+
+class RateLimiter:
+    def __init__(self, per_min: int):
+        self.per_min = per_min
+        self._hits = {}
+        self._lock = threading.Lock()
+
+    def allow(self, key: str) -> bool:
+        if self.per_min <= 0:
+            return True
+        now = time.time()
+        with self._lock:
+            q = self._hits.setdefault(key, [])
+            cutoff = now - 60
+            while q and q[0] < cutoff:
+                q.pop(0)
+            if len(q) >= self.per_min:
+                return False
+            q.append(now)
+            return True
+
+
+_rl = RateLimiter(RATE_LIMIT)
+
+
+def _rate_key(request: Request) -> str:
+    auth = request.headers.get("authorization", "")
+    if auth.startswith("Bearer "):
+        return "k:" + auth[7:][:16]
+    return "ip:" + (request.client.host if request.client else "?")
+
+
+# (startup migrado pro lifespan handler acima — antes era @app.on_event("startup"))
 
 
 # --- Auth ---
@@ -1243,7 +1700,10 @@ async def api_login(req: LoginRequest, response: Response):
 
 
 @app.post("/api/auth/logout")
-async def api_logout(response: Response):
+async def api_logout(request: Request, response: Response):
+    token = request.cookies.get("tambaqui_token")
+    if token:
+        _tokens.delete(token)
     response.delete_cookie("tambaqui_token")
     return {"ok": True}
 
@@ -1339,8 +1799,7 @@ class ChatRequest(BaseModel):
     presence_penalty: float = 0
     frequency_penalty: float = 0
 
-    class Config:
-        extra = "allow"  # aceitar campos extras sem erro
+    model_config = ConfigDict(extra="allow")  # aceitar campos extras sem erro
 
 class CompletionRequest(BaseModel):
     model: str = ""
@@ -1350,8 +1809,14 @@ class CompletionRequest(BaseModel):
     stream: bool = False
     stop: Optional[List[str]] = None
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
+
+
+class EmbeddingRequest(BaseModel):
+    model: str = ""
+    input: Union[str, List[str]]
+
+    model_config = ConfigDict(extra="allow")
 
 
 # ============================================================
@@ -1471,6 +1936,8 @@ async def chat_completions(req: ChatRequest, request: Request):
     """Endpoint principal - compatível com OpenAI API."""
     if _auth_ativo() and not _get_user_from_request(request):
         return JSONResponse(status_code=401, content={"error": {"message": "Invalid API key. Use Authorization: Bearer tb-...", "type": "invalid_api_key", "code": "invalid_api_key"}})
+    if not _rl.allow(_rate_key(request)):
+        return _resp_429()
     if not manager.pronto():
         # Sob demanda: tentar carregar automaticamente
         if manager.get_load_mode() == "ondemand":
@@ -1480,7 +1947,7 @@ async def chat_completions(req: ChatRequest, request: Request):
             return JSONResponse(status_code=503, content={"error": {"message": "No model loaded. Open /admin to download and load a model.", "type": "server_error"}})
 
     messages = [{"role": m.role, "content": m.content} for m in req.messages]
-    max_tokens = req.max_tokens or 2048
+    max_tokens = req.max_tokens or 1024
 
     # Pegar última msg do user pra log
     last_user_msg = ""
@@ -1496,6 +1963,14 @@ async def chat_completions(req: ChatRequest, request: Request):
     cli = _detectar_cli(messages)
     is_casual_msg = _is_casual(last_user_msg)
     messages = _reforcar_system_prompt(messages, cli)
+
+    # Injeta o system prompt do Tambaqui quando o cliente não manda um (CLIs via /v1 não mandam),
+    # adaptado ao tamanho do modelo. É o que faz o anti-alucinação finalmente atuar no caminho da API.
+    if not any(m.get("role") == "system" for m in messages):
+        messages.insert(0, {"role": "system", "content": _get_system_prompt(manager.n_params)})
+    # Cumprimento casual não precisa de 1024 tokens.
+    if is_casual_msg:
+        max_tokens = min(max_tokens, 128)
 
     _log_api("request", {
         "user": username, "cli": cli or "web", "modelo": manager.modelo_ativo,
@@ -1518,18 +1993,27 @@ async def chat_completions(req: ChatRequest, request: Request):
     t0 = time.time()
 
     if req.stream:
-        return StreamingResponse(_stream_response(messages, req), media_type="text/event-stream",
+        if not _bp.try_enter():
+            return _resp_429()
+        return StreamingResponse(_stream_response(messages, req, max_tokens), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     # Resposta completa
+    if not _bp.try_enter():
+        return _resp_429()
     prompt_text = " ".join(m["content"] for m in messages)
-    resposta = manager.gerar(messages, max_tokens, req.temperature, req.top_p, stream=False)
-    if not resposta:
-        resposta = ""
+    try:
+        # run_in_threadpool: generate() é bloqueante; sem isso travaria o event loop inteiro
+        # (health, /admin, outros usuários congelavam durante cada geração).
+        resposta = await run_in_threadpool(
+            manager.gerar, messages, max_tokens, req.temperature, req.top_p, False, req.stop
+        ) or ""
+    finally:
+        _bp.leave()
 
     elapsed = round(time.time() - t0, 1)
-    prompt_tokens = _contar_tokens(prompt_text)
-    completion_tokens = _contar_tokens(resposta)
+    prompt_tokens = manager.contar_tokens(prompt_text)
+    completion_tokens = manager.contar_tokens(resposta)
 
     _log_api("response", {
         "user": username, "tempo": f"{elapsed}s",
@@ -1560,6 +2044,8 @@ async def completions(req: CompletionRequest, request: Request):
     """Legacy completions endpoint."""
     if _auth_ativo() and not _get_user_from_request(request):
         return JSONResponse(status_code=401, content={"error": {"message": "Invalid API key", "type": "invalid_api_key"}})
+    if not _rl.allow(_rate_key(request)):
+        return _resp_429()
     if not manager.pronto():
         if manager.get_load_mode() == "ondemand":
             if not manager._auto_carregar():
@@ -1568,39 +2054,76 @@ async def completions(req: CompletionRequest, request: Request):
             return JSONResponse(status_code=503, content={"error": {"message": "No model loaded", "type": "server_error"}})
 
     messages = [{"role": "user", "content": req.prompt}]
-    resposta = manager.gerar(messages, req.max_tokens, req.temperature, stream=False) or ""
+    if not _bp.try_enter():
+        return _resp_429()
+    try:
+        resposta = await run_in_threadpool(
+            manager.gerar, messages, req.max_tokens, req.temperature, 0.9, False, req.stop
+        ) or ""
+    finally:
+        _bp.leave()
 
+    p_tok = manager.contar_tokens(req.prompt)
+    c_tok = manager.contar_tokens(resposta)
     return {
         "id": f"cmpl-{uuid.uuid4().hex[:8]}",
         "object": "text_completion",
         "created": int(time.time()),
         "model": manager.modelo_ativo or "",
         "choices": [{"text": resposta, "index": 0, "finish_reason": "stop"}],
-        "usage": {"prompt_tokens": _contar_tokens(req.prompt), "completion_tokens": _contar_tokens(resposta), "total_tokens": _contar_tokens(req.prompt) + _contar_tokens(resposta)},
+        "usage": {"prompt_tokens": p_tok, "completion_tokens": c_tok, "total_tokens": p_tok + c_tok},
     }
 
 
-def _stream_response(messages: list, req: ChatRequest):
+@app.post("/v1/embeddings")
+async def embeddings(req: EmbeddingRequest, request: Request):
+    """Embeddings compatíveis com OpenAI — requer um modelo GGUF (llama.cpp) carregado."""
+    if _auth_ativo() and not _get_user_from_request(request):
+        return JSONResponse(status_code=401, content={"error": {"message": "Invalid API key", "type": "invalid_api_key"}})
+    if not _rl.allow(_rate_key(request)):
+        return _resp_429()
+    if manager.backend != "llama" or not manager.pronto():
+        return JSONResponse(status_code=501, content={"error": {
+            "message": "Embeddings exigem um modelo GGUF (llama.cpp) carregado. Baixe um .gguf pelo Admin.",
+            "type": "not_implemented"}})
+    if not _bp.try_enter():
+        return _resp_429()
+    try:
+        vecs = await run_in_threadpool(manager.embeddings, req.input)
+    finally:
+        _bp.leave()
+    if vecs is None:
+        return JSONResponse(status_code=500, content={"error": {"message": "Falha ao gerar embeddings", "type": "server_error"}})
+    data = [{"object": "embedding", "index": i, "embedding": v} for i, v in enumerate(vecs)]
+    texto = req.input if isinstance(req.input, str) else " ".join(req.input)
+    toks = manager.contar_tokens(texto)
+    return {"object": "list", "data": data, "model": manager.modelo_ativo or req.model or "",
+            "usage": {"prompt_tokens": toks, "total_tokens": toks}}
+
+
+def _stream_response(messages: list, req: ChatRequest, max_tokens: int = 1024):
     """Gera SSE no formato OpenAI streaming - compatível com todos os CLIs."""
     chat_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
     model = manager.modelo_ativo or req.model or ""
     created = int(time.time())
-    max_tokens = req.max_tokens or 2048
 
-    # Primeiro chunk: role
-    yield f"data: {json.dumps({'id': chat_id, 'object': 'chat.completion.chunk', 'created': created, 'model': model, 'choices': [{'index': 0, 'delta': {'role': 'assistant'}, 'finish_reason': None}]})}\n\n"
+    try:
+        # Primeiro chunk: role
+        yield f"data: {json.dumps({'id': chat_id, 'object': 'chat.completion.chunk', 'created': created, 'model': model, 'choices': [{'index': 0, 'delta': {'role': 'assistant'}, 'finish_reason': None}]})}\n\n"
 
-    for chunk in manager.gerar(messages, max_tokens, req.temperature, req.top_p, stream=True):
-        data = {
-            "id": chat_id, "object": "chat.completion.chunk",
-            "created": created, "model": model,
-            "choices": [{"index": 0, "delta": {"content": chunk}, "finish_reason": None}],
-        }
-        yield f"data: {json.dumps(data)}\n\n"
+        for chunk in manager.gerar(messages, max_tokens, req.temperature, req.top_p, stream=True, stop=req.stop):
+            data = {
+                "id": chat_id, "object": "chat.completion.chunk",
+                "created": created, "model": model,
+                "choices": [{"index": 0, "delta": {"content": chunk}, "finish_reason": None}],
+            }
+            yield f"data: {json.dumps(data)}\n\n"
 
-    # Final
-    yield f"data: {json.dumps({'id': chat_id, 'object': 'chat.completion.chunk', 'created': created, 'model': model, 'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}]})}\n\n"
-    yield "data: [DONE]\n\n"
+        # Final
+        yield f"data: {json.dumps({'id': chat_id, 'object': 'chat.completion.chunk', 'created': created, 'model': model, 'choices': [{'index': 0, 'delta': {}, 'finish_reason': 'stop'}]})}\n\n"
+        yield "data: [DONE]\n\n"
+    finally:
+        _bp.leave()
 
 
 # --- Tambaqui API (chat com busca + sessão) ---
@@ -1615,51 +2138,56 @@ class TambaquiChatRequest(BaseModel):
 @app.post("/api/chat")
 async def tambaqui_chat(req: TambaquiChatRequest):
     """Chat Tambaqui com streaming: busca web → stream do modelo token a token."""
+    if not _bp.try_enter():
+        return _resp_429()
     sessao = Sessao(req.session_id, req.user)
     sessao.adicionar("user", req.mensagem)
 
     def _stream():
-        # 1. Buscar contexto web
-        contexto = ""
-        fontes = []
-        if req.buscar_web:
-            pesquisa = buscar_web(req.mensagem)
-            contexto = pesquisa["contexto"]
-            fontes = pesquisa["fontes"]
+        try:
+            # 1. Buscar contexto web
+            contexto = ""
+            fontes = []
+            if req.buscar_web:
+                pesquisa = buscar_web(req.mensagem)
+                contexto = pesquisa["contexto"]
+                fontes = pesquisa["fontes"]
 
-        # Enviar fontes + session_id primeiro
-        yield f"data: {json.dumps({'type': 'meta', 'fontes': fontes, 'session_id': sessao.session_id})}\n\n"
+            # Enviar fontes + session_id primeiro
+            yield f"data: {json.dumps({'type': 'meta', 'fontes': fontes, 'session_id': sessao.session_id})}\n\n"
 
-        # 2. Montar messages
-        messages = [{"role": "system", "content": _get_system_prompt()}]
-        messages.extend(sessao.get_messages(max_msgs=10))
+            # 2. Montar messages (prompt adaptado ao tamanho do modelo)
+            messages = [{"role": "system", "content": _get_system_prompt(manager.n_params)}]
+            messages.extend(sessao.get_messages(max_msgs=10))
 
-        if contexto and messages:
-            last = messages[-1]
-            if last["role"] == "user":
-                last["content"] = f"Contexto da pesquisa:\n{contexto[:2500]}\n\n---\n{last['content']}"
+            if contexto and messages:
+                last = messages[-1]
+                if last["role"] == "user":
+                    last["content"] = f"Contexto da pesquisa:\n{contexto[:2500]}\n\n---\n{last['content']}"
 
-        # 3. Stream do modelo
-        full_response = ""
-        if manager.pronto():
-            try:
-                for chunk in manager.gerar(messages, max_tokens=2048, stream=True):
-                    full_response += chunk
-                    yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
-            except Exception as e:
-                logger.error(f"Stream erro: {e}")
+            # 3. Stream do modelo
+            full_response = ""
+            if manager.pronto():
+                try:
+                    for chunk in manager.gerar(messages, max_tokens=1024, stream=True):
+                        full_response += chunk
+                        yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+                except Exception as e:
+                    logger.error(f"Stream erro: {e}")
 
-        # 4. Fallback se modelo não respondeu
-        if not full_response and contexto:
-            full_response = contexto[:3000]
-            yield f"data: {json.dumps({'type': 'chunk', 'content': full_response})}\n\n"
-        elif not full_response:
-            full_response = "Modelo não carregado. Acesse /admin para baixar e carregar."
-            yield f"data: {json.dumps({'type': 'chunk', 'content': full_response})}\n\n"
+            # 4. Fallback se modelo não respondeu
+            if not full_response and contexto:
+                full_response = contexto[:3000]
+                yield f"data: {json.dumps({'type': 'chunk', 'content': full_response})}\n\n"
+            elif not full_response:
+                full_response = "Modelo não carregado. Acesse /admin para baixar e carregar."
+                yield f"data: {json.dumps({'type': 'chunk', 'content': full_response})}\n\n"
 
-        # 5. Salvar e finalizar
-        sessao.adicionar("assistant", full_response)
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            # 5. Salvar e finalizar
+            sessao.adicionar("assistant", full_response)
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        finally:
+            _bp.leave()
 
     return StreamingResponse(_stream(), media_type="text/event-stream")
 
@@ -1677,6 +2205,30 @@ async def api_modelos():
 @app.post("/api/modelos/baixar")
 async def api_baixar(nome: str):
     return manager.baixar(nome)
+
+@app.get("/api/hub/buscar")
+async def api_hub_buscar(q: str = "", limit: int = 20):
+    """Busca modelos de geração de texto no HuggingFace Hub pra pessoa escolher."""
+    limit = max(1, min(limit, 50))
+    return {"resultados": await run_in_threadpool(manager.buscar_hub, q, limit)}
+
+@app.get("/api/hub/gguf")
+async def api_hub_gguf(repo: str):
+    """Lista as quantizações .gguf de um repo GGUF."""
+    return {"arquivos": await run_in_threadpool(manager.listar_gguf_repo, repo)}
+
+@app.post("/api/modelos/baixar-gguf")
+async def api_baixar_gguf(repo: str, arquivo: str):
+    """Baixa uma quantização específica (.gguf) de um repo."""
+    return manager.baixar_gguf(repo, arquivo)
+
+@app.get("/api/trust-remote-code")
+async def api_get_trc():
+    return {"trust_remote_code": manager.get_trust_remote_code()}
+
+@app.post("/api/trust-remote-code")
+async def api_set_trc(val: bool):
+    return manager.set_trust_remote_code(val)
 
 @app.post("/api/modelos/carregar")
 async def api_carregar(nome: str):
@@ -1838,7 +2390,7 @@ def cli_chat():
 
         # Gerar
         sessao.adicionar("user", msg)
-        messages = [{"role": "system", "content": _get_system_prompt()}]
+        messages = [{"role": "system", "content": _get_system_prompt(manager.n_params)}]
         messages.extend(sessao.get_messages(max_msgs=10))
 
         print()
